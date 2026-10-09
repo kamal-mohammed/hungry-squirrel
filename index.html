@@ -309,6 +309,20 @@
     0%   { transform: scale(0.4); opacity: 0; }
     100% { transform: none; opacity: 1; }
   }
+  #splash .best {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: rgba(255,216,74,0.12);
+    border: 1px solid rgba(255,216,74,0.35);
+    font: 700 15px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: 0.06em;
+    color: #ffd84a;
+    font-variant-numeric: tabular-nums;
+  }
+  #splash .best .ico { font-family: "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
   #splash .hint {
     font: 500 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color: #e8f3e4;
@@ -377,6 +391,18 @@
   .stat.hearts .h.lost { color: #b9b0a8; }
   .stat.hearts .h.pop { animation: heartpop 0.45s ease; }
   .stat.hearts .h.gain { animation: heartgain 0.6s ease; }
+  .stat.best { padding-right: 14px; }
+  .stat.best.rec {
+    background: #ffd84a;
+    box-shadow: 0 6px 18px rgba(255,190,40,0.45);
+    animation: bestpop 0.6s cubic-bezier(0.2, 1.5, 0.4, 1);
+  }
+  #bestStat[hidden], #splashBest[hidden] { display: none !important; }
+  @keyframes bestpop {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.25) rotate(-4deg); }
+    100% { transform: scale(1); }
+  }
   @keyframes heartgain {
     0%   { transform: scale(0.2); color: #ffd84a; }
     50%  { transform: scale(1.6); color: #ffd84a; }
@@ -426,6 +452,7 @@
 <button class="btn" id="muteBtn" aria-label="Sound on or off">🔊</button>
 <div id="hud" aria-live="off">
   <span class="stat hearts" id="heartsStat" title="Lives"><span class="h">♥</span><span class="h">♥</span><span class="h">♥</span></span>
+  <span class="stat best" id="bestStat" title="Best pile" hidden><span class="ico">🏆</span><span id="bestNum">0</span></span>
 </div>
 
 <div id="ui">
@@ -517,6 +544,7 @@
     </div>
     <button class="btn text" id="startBtn" aria-label="Start">▶&nbsp; Start</button>
   </div>
+  <div class="best" id="splashBest" hidden><span class="ico">🏆</span><span>Best pile: <b id="splashBestNum">0</b></span></div>
   <div class="hint">Drag or use ← → to run. Catch acorns, dodge branches.</div>
 </div>
 
@@ -637,6 +665,7 @@
     lastTen: -99,           // time the last ruby x10 appeared
     slow: 0,                // seconds of stomach ache left after a rotten acorn
     sparkle: 0,             // seconds of sparkle left after catching a golden acorn
+    newBest: false,         // this run has beaten the saved high score
     runPhase: 0,            // leg animation phase
     over: { t: 0, fromX: 0, shown: false, munched: false }
   };
@@ -690,6 +719,7 @@
     state.lastRotten = -99;
     state.slow = 0;
     state.sparkle = 0;
+    state.newBest = false;
     state.runPhase = 0;
     linkbox.classList.remove('show');
     shareBtn.classList.remove('ok');
@@ -809,11 +839,42 @@
   // A focused button would swallow the next Space press, so buttons let go of focus after a click.
   for (const b of document.querySelectorAll('button')) b.addEventListener('click', () => b.blur());
 
+  // High score: the biggest pile ever, kept in localStorage between visits.
+  // Saved the moment it is beaten so closing the tab mid-run keeps the record.
+  const BEST_KEY = 'hs-best';
+  let best = 0;
+  try { best = Math.max(0, parseInt(localStorage.getItem(BEST_KEY), 10) || 0); } catch (_) {}
+  const bestStat = document.getElementById('bestStat');
+  const bestNum = document.getElementById('bestNum');
+  const splashBest = document.getElementById('splashBest');
+  const splashBestNum = document.getElementById('splashBestNum');
+  function checkBest() {
+    if (state.pile <= best) return;
+    best = state.pile;
+    try { localStorage.setItem(BEST_KEY, String(best)); } catch (_) {}
+    if (!state.newBest) {
+      state.newBest = true;
+      SFX.play('chime');
+      bestStat.classList.remove('rec'); void bestStat.offsetWidth; bestStat.classList.add('rec');
+    }
+  }
+
   // Lives display. DOM is only touched when the number changes.
   const hud = document.getElementById('hud');
   const hearts = Array.from(document.querySelectorAll('#heartsStat .h'));
-  let hudLives = -1;
+  let hudLives = -1, hudBest = -1, hudRec = null;
   function updateHud() {
+    if (hudBest !== best) {
+      hudBest = best;
+      bestNum.textContent = String(best);
+      splashBestNum.textContent = String(best);
+      bestStat.hidden = best <= 0;
+      splashBest.hidden = best <= 0;
+    }
+    if (hudRec !== state.newBest) {
+      hudRec = state.newBest;
+      if (!hudRec) bestStat.classList.remove('rec');
+    }
     if (hudLives !== state.lives) {
       // Filled hearts = lives remaining, hollow grey hearts = lives used.
       // Hearts empty from the right so the remaining ones stay in place.
@@ -1341,6 +1402,7 @@
         }
         state.pile = Math.min(TUNE.maxPile, state.pile + 1);
         state.streak += 1;
+        checkBest();
         if (a.gold) {
           state.lives = Math.min(TUNE.maxLives, state.lives + 1);
           state.maxLives = Math.max(state.maxLives, state.lives);
@@ -1453,6 +1515,7 @@
   function tossTen() {
     state.pile = Math.min(TUNE.maxPile, state.pile + 10);
     state.streak += 10;
+    checkBest();
     state.sparkle = 0.8;
     SFX.play('jackpot');
     for (let i = 0; i < 10; i++) {
@@ -2557,6 +2620,24 @@
     octx.strokeText('GAME OVER', 0, 0);
     octx.fillStyle = INK;
     octx.fillText('GAME OVER', 0, 0);
+    // Second line: a golden NEW BEST that pulses, or the record to beat.
+    if (state.newBest) {
+      const pulse = 1 + 0.06 * Math.sin(state.over.t * 7);
+      octx.translate(0, size * 0.95);
+      octx.scale(pulse, pulse);
+      octx.font = `800 ${size * 0.55}px "Segoe UI", system-ui, -apple-system, Roboto, sans-serif`;
+      octx.lineWidth = size * 0.14;
+      octx.strokeStyle = '#5a3414';
+      octx.strokeText(`\u2605 NEW BEST ${best} \u2605`, 0, 0);
+      octx.fillStyle = '#ffd84a';
+      octx.fillText(`\u2605 NEW BEST ${best} \u2605`, 0, 0);
+    } else if (best > 0) {
+      octx.font = `700 ${size * 0.42}px "Segoe UI", system-ui, -apple-system, Roboto, sans-serif`;
+      octx.lineWidth = size * 0.12;
+      octx.strokeText(`Best pile: ${best}`, 0, size * 0.9);
+      octx.fillStyle = INK;
+      octx.fillText(`Best pile: ${best}`, 0, size * 0.9);
+    }
     octx.restore();
   }
 

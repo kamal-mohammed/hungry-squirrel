@@ -20,6 +20,10 @@ A one-thumb browser game: a squirrel runs under an oak tree catching falling aco
 | Silver sweeper (blue glow, spinning ring) | Clears half the acorns on the ground and lowers it |
 | Ruby x10 | Adds ten acorns to the pile |
 
+## High score
+
+Your best pile is saved in the browser and shown on the start screen, in the top bar while you play, and on the game over screen. Beat it and the trophy flashes gold.
+
 ## Sharing
 
 The share button copies a link with your score. Opening it shows your pile as a grey ghost next to the tree, so a friend can try to beat it. Pass it and the squirrel does a little dance.
