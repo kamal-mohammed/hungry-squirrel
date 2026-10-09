@@ -1,0 +1,2630 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Hungry Squirrel</title>
+<style>
+  :root {
+    --sky-top: #bfe6ff;
+    --sky-bottom: #eaf7ff;
+    --ground: #6fa84f;
+    --ground-dark: #4f8536;
+    --trunk: #7a4b25;
+    --trunk-dark: #5a361a;
+    --leaf: #3f9a46;
+    --leaf-dark: #2f7a37;
+    --pile: #8a5a2b;
+    --pile-dark: #5e3b19;
+    --ghost: rgba(120, 120, 120, 0.35);
+    --ghost-line: rgba(80, 80, 80, 0.5);
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--sky-bottom);
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+  }
+  #overlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+  }
+  #ui {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    gap: 18px;
+    padding: 0 16px calc(28px + env(safe-area-inset-bottom));
+    pointer-events: none;
+  }
+  #ui.show { display: flex; }
+  .btn {
+    pointer-events: auto;
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    border: 0;
+    background: rgba(255,255,255,0.92);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    font-size: 34px;
+    line-height: 72px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.08s ease;
+  }
+  .btn:active { transform: scale(0.94); }
+  .btn.ok { background: #d9f7d3; }
+  #center {
+    position: fixed;
+    inset: 0;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+  }
+  #center.show { display: flex; }
+  /* Pill buttons with a word on them: Start on the splash, Resume when paused. */
+  .btn.text {
+    width: auto; height: 68px;
+    padding: 0 38px;
+    border-radius: 34px;
+    background: #ffd84a;
+    color: #3b2314;
+    font: 800 26px/68px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.35), 0 0 30px rgba(255,216,74,0.25), inset 0 -4px 0 rgba(0,0,0,0.12);
+  }
+  .btn.text:active { box-shadow: 0 3px 10px rgba(0,0,0,0.2); }
+  /* Splash: logo, loading animation, then the Start button. Covers the scene
+     while Three.js builds it and fades away when the game starts. */
+  #splash {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+    box-sizing: border-box;
+    background: radial-gradient(circle at 50% 24%, #1f4a3a 0%, #122c2b 45%, #0a151e 100%);   /* night under the tree */
+    overflow: hidden;
+    transition: opacity 0.55s ease, visibility 0.55s;
+  }
+  #splash.hide { opacity: 0; visibility: hidden; pointer-events: none; }
+  #splash.hide * { animation-play-state: paused; }
+  /* Acorns drift down behind the logo the whole time the splash is up. */
+  #splash .rain { position: absolute; inset: 0; pointer-events: none; }
+  #splash .rain svg {
+    position: absolute;
+    top: -60px;
+    width: 26px; height: 32px;
+    opacity: 0.4;
+    animation: rainfall 7s linear infinite;
+  }
+  #splash .rain svg:nth-child(1) { left: 8%;  animation-duration: 7.5s; animation-delay: -1s; }
+  #splash .rain svg:nth-child(2) { left: 22%; animation-duration: 9s;   animation-delay: -5s; width: 20px; height: 25px; }
+  #splash .rain svg:nth-child(3) { left: 38%; animation-duration: 8s;   animation-delay: -3s; }
+  #splash .rain svg:nth-child(4) { left: 55%; animation-duration: 10s;  animation-delay: -7s; width: 18px; height: 22px; }
+  #splash .rain svg:nth-child(5) { left: 70%; animation-duration: 7s;   animation-delay: -2s; }
+  #splash .rain svg:nth-child(6) { left: 84%; animation-duration: 9.5s; animation-delay: -6s; width: 22px; height: 27px; }
+  #splash .rain svg:nth-child(7) { left: 93%; animation-duration: 8.5s; animation-delay: -4s; }
+  @keyframes rainfall {
+    0%   { transform: translateY(0) rotate(-20deg); }
+    100% { transform: translateY(calc(100vh + 120px)) rotate(340deg); }
+  }
+  #splash .logo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    animation: logoin 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  }
+  #splash .badge { position: relative; animation: floaty 3.2s ease-in-out infinite; }
+  #splash .logo svg {
+    width: min(44vw, 200px);
+    height: auto;
+    display: block;
+    filter: drop-shadow(0 0 28px rgba(140, 230, 120, 0.35)) drop-shadow(0 12px 18px rgba(0, 0, 0, 0.45));
+    overflow: visible;
+  }
+  @keyframes floaty {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-7px); }
+  }
+  /* The squirrel on the badge is alive: it breathes, wags, tilts, blinks and chatters. */
+  #splash .logo svg .sq, #splash .logo svg .tail, #splash .logo svg .head,
+  #splash .logo svg .eyes, #splash .logo svg .mouth, #splash .logo svg .belly, #splash .logo svg .held {
+    transform-box: fill-box;
+  }
+  #splash .logo svg .sq   { transform-origin: 50% 100%; animation: breathe 1.6s ease-in-out infinite; }
+  #splash .logo svg .tail { transform-origin: 90% 95%;  animation: wag 1.1s ease-in-out infinite; }
+  #splash .logo svg .head { transform-origin: 50% 90%;  animation: tilt 2.6s ease-in-out infinite; }
+  #splash .logo svg .eyes { transform-origin: 50% 50%;  animation: blink 3.8s infinite; }
+  #splash .logo svg .mouth { transform-origin: 50% 0%;  animation: chatter 0.32s ease-in-out infinite alternate; }
+  #splash .logo svg .belly { transform-origin: 50% 50%; animation: rumble 2.8s ease-in-out infinite; }
+  #splash .logo svg .held  { transform-origin: 50% 50%; animation: wobble 1.3s ease-in-out infinite; }
+  @keyframes breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.02, 1.04); } }
+  @keyframes wag     { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
+  @keyframes tilt    { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+  @keyframes blink   { 0%, 90%, 100% { transform: scaleY(1); } 93%, 97% { transform: scaleY(0.08); } }
+  @keyframes chatter { 0% { transform: scaleY(0.5); } 100% { transform: scaleY(2.2); } }
+  @keyframes rumble  { 0%, 68%, 84%, 100% { transform: scale(1); } 72%, 80% { transform: scale(1.06, 0.95); } 76% { transform: scale(0.96, 1.05); } }
+  @keyframes wobble  { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+  /* The speech bubble: "I'm hungry..." then "Feed me!", over and over. */
+  #splash .bubble {
+    position: absolute;
+    left: 78%;
+    top: -4%;
+    padding: 10px 16px;
+    border-radius: 18px;
+    background: #fff;
+    color: #3b2314;
+    font: 800 clamp(15px, 4vw, 20px)/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    white-space: nowrap;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.16);
+    transform-origin: 0% 100%;
+    animation: bubble 7s ease-in-out infinite;
+  }
+  #splash .bubble::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    bottom: -9px;
+    width: 0; height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 11px solid #fff;
+    transform: rotate(18deg);
+  }
+  #splash .bubble span { display: block; animation: say1 7s ease-in-out infinite; }
+  #splash .bubble span + span {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation-name: say2;
+  }
+  @keyframes bubble {
+    0%, 2%   { transform: scale(0.5); opacity: 0; }
+    7%       { transform: scale(1.1); opacity: 1; }
+    11%, 46% { transform: scale(1); opacity: 1; }
+    50%      { transform: scale(0.9); }
+    55%      { transform: scale(1.1); }
+    59%, 92% { transform: scale(1); opacity: 1; }
+    100%     { transform: scale(0.5); opacity: 0; }
+  }
+  @keyframes say1 {
+    0%, 4%    { opacity: 0; transform: translateY(5px); }
+    9%, 44%   { opacity: 1; transform: none; }
+    49%, 100% { opacity: 0; transform: translateY(-5px); }
+  }
+  @keyframes say2 {
+    0%, 51%  { opacity: 0; transform: translateY(5px); }
+    57%, 91% { opacity: 1; transform: none; }
+    96%, 100% { opacity: 0; transform: translateY(-5px); }
+  }
+  @media (max-width: 420px) {
+    #splash .bubble { left: 70%; top: -10%; }
+  }
+  #splash h1 {
+    margin: 6px 0 0;
+    text-align: center;
+    text-transform: uppercase;
+    font: 900 clamp(26px, 8.5vw, 50px)/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: 0.03em;
+    text-shadow: 0 3px 0 rgba(0,0,0,0.55), 0 10px 22px rgba(0,0,0,0.5);
+  }
+  #splash h1 .w1 { display: block; color: #f0b26a; }
+  #splash h1 .w2 { display: block; color: #8fe07a; font-size: 1.2em; margin-top: 0.08em; }
+  @keyframes logoin {
+    0%   { transform: translateY(24px) scale(0.7); opacity: 0; }
+    100% { transform: none; opacity: 1; }
+  }
+  #splash .stage {
+    position: relative;
+    width: 100%;
+    height: 118px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #splash .loader {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    transition: opacity 0.35s ease;
+  }
+  #splash.loaded .loader { opacity: 0; pointer-events: none; }
+  #splash .loader .acorns { display: flex; gap: 12px; height: 54px; align-items: flex-end; }
+  #splash .loader .acorns svg {
+    width: 28px; height: 34px;
+    animation: bounce 0.95s ease-in-out infinite;
+    transform-origin: 50% 100%;
+  }
+  #splash .loader .acorns svg:nth-child(2) { animation-delay: 0.16s; }
+  #splash .loader .acorns svg:nth-child(3) { animation-delay: 0.32s; }
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0) scale(1, 1); }
+    35%      { transform: translateY(-18px) scale(0.94, 1.08); }
+    60%      { transform: translateY(0) scale(1.12, 0.86); }
+    75%      { transform: translateY(-3px) scale(1, 1); }
+  }
+  #splash .loader .bar {
+    width: min(60vw, 220px); height: 10px;
+    border-radius: 5px;
+    background: rgba(255,255,255,0.18);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.35);
+    overflow: hidden;
+  }
+  #splash .loader .bar i {
+    display: block;
+    width: 40%; height: 100%;
+    border-radius: 5px;
+    background: linear-gradient(90deg, #d19a56, #ffd84a);
+    animation: slide 1.3s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0%   { transform: translateX(-110%); }
+    100% { transform: translateX(260%); }
+  }
+  #splash .loader .ltxt {
+    font: 700 14px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: #e8f3e4;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+  #startBtn { display: none; }
+  #splash.loaded #startBtn { display: block; animation: popin 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
+  @keyframes popin {
+    0%   { transform: scale(0.4); opacity: 0; }
+    100% { transform: none; opacity: 1; }
+  }
+  #splash .hint {
+    font: 500 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: #e8f3e4;
+    opacity: 0.75;
+    text-align: center;
+    max-width: 300px;
+  }
+  #pauseBtn {
+    position: fixed;
+    top: calc(14px + env(safe-area-inset-top));
+    left: 14px;
+    width: 52px; height: 52px;
+    line-height: 52px;
+    font-size: 24px;
+    display: none;
+    pointer-events: auto;
+    background: rgba(255,255,255,0.75);
+  }
+  #pauseBtn.show { display: block; }
+  #muteBtn {
+    position: fixed;
+    top: calc(14px + env(safe-area-inset-top));
+    right: 14px;
+    width: 52px; height: 52px;
+    line-height: 52px;
+    font-size: 22px;
+    pointer-events: auto;
+    background: rgba(255,255,255,0.75);
+  }
+  #hud {
+    position: fixed;
+    top: calc(14px + env(safe-area-inset-top));
+    left: 80px;
+    display: none;
+    gap: 10px;
+    pointer-events: none;
+  }
+  #hud.show { display: flex; }
+  #hud.nopause { left: 14px; }   /* no pause button to sit beside at game over */
+  .stat {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 52px;
+    padding: 0 16px 0 12px;
+    border-radius: 26px;
+    background: rgba(255,255,255,0.75);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+    font: 700 22px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-variant-numeric: tabular-nums;
+    color: #3b2314;
+  }
+  .stat .ico {
+    position: relative;
+    font-size: 22px;
+    line-height: 1;
+    font-family: "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;
+  }
+  .stat.hearts { gap: 3px; padding: 0 12px; }
+  .stat.hearts .h {
+    font-size: 24px;
+    line-height: 1;
+    color: #e0433c;
+    transition: color 0.25s ease, transform 0.25s ease;
+  }
+  .stat.hearts .h.lost { color: #b9b0a8; }
+  .stat.hearts .h.pop { animation: heartpop 0.45s ease; }
+  .stat.hearts .h.gain { animation: heartgain 0.6s ease; }
+  @keyframes heartgain {
+    0%   { transform: scale(0.2); color: #ffd84a; }
+    50%  { transform: scale(1.6); color: #ffd84a; }
+    100% { transform: scale(1); }
+  }
+  @keyframes heartpop {
+    0%   { transform: scale(1); }
+    35%  { transform: scale(1.5) rotate(-12deg); }
+    100% { transform: scale(1); }
+  }
+  @media (max-width: 420px) {
+    #hud { gap: 7px; }
+    .stat { height: 46px; padding: 0 12px 0 10px; font-size: 19px; border-radius: 23px; }
+    .stat .ico { font-size: 19px; }
+    .stat.hearts { padding: 0 10px; }
+    .stat.hearts .h { font-size: 21px; }
+  }
+  #linkbox {
+    position: fixed;
+    left: 16px; right: 16px;
+    bottom: calc(116px + env(safe-area-inset-bottom));
+    display: none;
+    pointer-events: auto;
+  }
+  #linkbox.show { display: block; }
+  #linkbox input {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 15px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,0.15);
+    background: rgba(255,255,255,0.95);
+    -webkit-user-select: text;
+    user-select: text;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<canvas id="overlay"></canvas>
+
+<div id="center">
+  <button class="btn text" id="playBtn" aria-label="Resume">▶&nbsp; Resume</button>
+</div>
+<button class="btn" id="pauseBtn" aria-label="Pause">⏸</button>
+<button class="btn" id="muteBtn" aria-label="Sound on or off">🔊</button>
+<div id="hud" aria-live="off">
+  <span class="stat hearts" id="heartsStat" title="Lives"><span class="h">♥</span><span class="h">♥</span><span class="h">♥</span></span>
+</div>
+
+<div id="ui">
+  <button class="btn" id="shareBtn" aria-label="Copy share link">🔗</button>
+  <button class="btn" id="replayBtn" aria-label="Play again">🔁</button>
+</div>
+<div id="linkbox"><input id="linkInput" type="text" readonly></div>
+
+<div id="splash">
+  <div class="rain" aria-hidden="true">
+    <svg><use href="#acornSym"/></svg><svg><use href="#acornSym"/></svg><svg><use href="#acornSym"/></svg>
+    <svg><use href="#acornSym"/></svg><svg><use href="#acornSym"/></svg><svg><use href="#acornSym"/></svg>
+    <svg><use href="#acornSym"/></svg>
+  </div>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="acornSym" viewBox="0 0 30 36">
+      <path d="M15 35 C7.5 35 4 27 4 17 L26 17 C26 27 22.5 35 15 35 Z" fill="#9c6633"/>
+      <path d="M15 24 C11 24 8 28 7.5 32" fill="none" stroke="#7d4f24" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+      <path d="M15 3 C6 3 2.5 10 2.5 17.5 Q15 14 27.5 17.5 C27.5 10 24 3 15 3 Z" fill="#6b4522"/>
+      <path d="M2.5 17.5 Q15 14 27.5 17.5" fill="none" stroke="#56361a" stroke-width="2.4" stroke-linecap="round"/>
+      <rect x="13.4" y="0" width="3.2" height="6" rx="1.6" fill="#4f3218"/>
+    </symbol>
+  </svg>
+  <div class="logo">
+    <div class="badge">
+    <svg viewBox="0 0 200 200" aria-label="Hungry Squirrel logo" role="img">
+      <defs>
+        <radialGradient id="lgBadge" cx="50%" cy="32%" r="72%">
+          <stop offset="0" stop-color="#8be07f"/>
+          <stop offset="1" stop-color="#2f7a37"/>
+        </radialGradient>
+        <clipPath id="lgClip"><circle cx="100" cy="100" r="86"/></clipPath>
+      </defs>
+      <circle cx="100" cy="100" r="95" fill="#fff"/>
+      <circle cx="100" cy="100" r="86" fill="url(#lgBadge)"/>
+      <g clip-path="url(#lgClip)">
+        <path d="M0 150 Q100 122 200 150 L200 200 L0 200 Z" fill="#4f8536"/>
+        <path d="M0 158 Q100 136 200 158 L200 200 L0 200 Z" fill="#3f6f2b" opacity="0.55"/>
+      </g>
+      <g class="sq">
+        <g class="tail">
+          <path d="M78 150 C36 156 20 108 44 76 C62 52 94 56 92 82 C74 82 62 98 66 116 C70 132 82 142 96 140 Z" fill="#8a4f22"/>
+          <path d="M56 82 C44 100 46 124 66 136" fill="none" stroke="#d19a56" stroke-width="8" stroke-linecap="round"/>
+        </g>
+        <ellipse cx="114" cy="128" rx="33" ry="34" fill="#a0622d"/>
+        <ellipse class="belly" cx="116" cy="134" rx="20" ry="25" fill="#f0d2a8"/>
+        <ellipse cx="98" cy="160" rx="14" ry="7" fill="#7a4b25"/>
+        <ellipse cx="130" cy="160" rx="14" ry="7" fill="#7a4b25"/>
+        <g class="held">
+          <path d="M116 142 C107 142 103 134 103 124 L129 124 C129 134 125 142 116 142 Z" fill="#9c6633"/>
+          <path d="M116 108 C106 108 102 115 102 124 Q116 120 130 124 C130 115 126 108 116 108 Z" fill="#6b4522"/>
+          <rect x="114.2" y="104" width="3.6" height="7" rx="1.8" fill="#4f3218"/>
+          <circle cx="103" cy="128" r="7.5" fill="#a0622d"/>
+          <circle cx="129" cy="128" r="7.5" fill="#a0622d"/>
+        </g>
+        <g class="head">
+          <ellipse cx="98" cy="60" rx="11" ry="15" fill="#a0622d"/>
+          <ellipse cx="138" cy="60" rx="11" ry="15" fill="#a0622d"/>
+          <ellipse cx="98" cy="62" rx="5" ry="8" fill="#f2b8a2"/>
+          <ellipse cx="138" cy="62" rx="5" ry="8" fill="#f2b8a2"/>
+          <circle cx="118" cy="84" r="28" fill="#a0622d"/>
+          <ellipse cx="118" cy="97" rx="15" ry="11" fill="#f0d2a8"/>
+          <g class="eyes">
+            <circle cx="106" cy="80" r="6" fill="#2b1a10"/>
+            <circle cx="130" cy="80" r="6" fill="#2b1a10"/>
+            <circle cx="108" cy="78" r="2.2" fill="#fff"/>
+            <circle cx="132" cy="78" r="2.2" fill="#fff"/>
+          </g>
+          <circle cx="118" cy="92" r="4.5" fill="#2b1a10"/>
+          <ellipse class="mouth" cx="118" cy="102" rx="4.5" ry="2.6" fill="#2b1a10"/>
+          <circle cx="96" cy="94" r="5" fill="#f2a08a" opacity="0.8"/>
+          <circle cx="140" cy="94" r="5" fill="#f2a08a" opacity="0.8"/>
+        </g>
+      </g>
+    </svg>
+    <div class="bubble" aria-hidden="true"><span>I'm hungry…</span><span>Feed me!</span></div>
+    </div>
+    <h1><span class="w1">Hungry</span><span class="w2">Squirrel</span></h1>
+  </div>
+  <div class="stage">
+    <div class="loader" id="loader" aria-live="polite">
+      <div class="acorns">
+        <svg><use href="#acornSym"/></svg>
+        <svg><use href="#acornSym"/></svg>
+        <svg><use href="#acornSym"/></svg>
+      </div>
+      <div class="bar"><i></i></div>
+      <div class="ltxt">Loading…</div>
+    </div>
+    <button class="btn text" id="startBtn" aria-label="Start">▶&nbsp; Start</button>
+  </div>
+  <div class="hint">Drag or use ← → to run. Catch acorns, dodge branches.</div>
+</div>
+
+<script src="three.min.js"></script>
+<script>if (!window.THREE) document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.158.0/three.min.js"><\/script>');</script>
+<script>
+(() => {
+  'use strict';
+
+  // ------------------------------------------------------------------
+  // Canvas and sizing. The 3D view renders into #game; a transparent 2D
+  // canvas (#overlay) on top carries the text.
+  // ------------------------------------------------------------------
+  const canvas = document.getElementById('game');
+  let W = 0, H = 0, DPR = 1;
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    overlay.width = Math.round(W * DPR);
+    overlay.height = Math.round(H * DPR);
+    octx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (renderer) {
+      renderer.setPixelRatio(DPR);
+      renderer.setSize(W, H, false);
+    }
+    layout();
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', resize);
+
+  // ------------------------------------------------------------------
+  // World layout (recomputed on resize)
+  // ------------------------------------------------------------------
+  const L = {};   // layout numbers
+  function layout() {
+    L.S = Math.max(48, Math.min(96, W * 0.14));        // base size: acorns, branches, piles
+    L.SQ = L.S * 1.4;                                   // the squirrel itself, and its hitboxes
+    L.groundY0 = H - Math.max(70, H * 0.12);           // the real ground
+    L.groundY = L.groundY0 - (state ? state.rise : 0);  // the surface, rising with missed acorns
+    L.trunkW = Math.max(26, L.S * 0.5);
+    L.trunkX = W - L.trunkW * 1.4;                     // trunk left edge
+    L.pileX = L.trunkX - L.S * 0.15;                   // real pile center
+    L.ghostX = L.trunkX - L.S * 1.25;                  // ghost pile center
+    L.acornR = L.S * 0.22;
+    L.branchW = L.S * 1.35;
+    L.branchH = L.S * 0.32;
+    L.canopyY = Math.max(40, H * 0.08);
+    buildBackground();
+  }
+
+  // Pile radius in pixels for a count of acorns. Grows quickly at first so
+  // every early catch is visible, then flattens toward a cap so a big score
+  // never swallows the play area. Ghost and real piles share this curve.
+  function pileRadius(n) {
+    if (n <= 0) return 0;
+    const rMax = Math.min(W * 0.20, H * 0.22, (H - L.groundY) * 0.3 + L.S * 1.3);
+    return rMax * Math.tanh(Math.sqrt(n) / 6);
+  }
+
+  // ------------------------------------------------------------------
+  // Game state
+  // ------------------------------------------------------------------
+  const TUNE = {
+    followLag: 12,          // higher = snappier (per second easing rate)
+    keySpeed: 1.6,          // screen widths per second with arrow keys
+    acornSpeed: 0.28,       // screen heights per second at start
+    acornInterval: 1.05,    // seconds between acorns at start
+    branchInterval: 4.2,    // seconds between branches at start
+    branchSpeed: 0.40,      // screen heights per second at start
+    rampTime: 75,           // seconds to reach max speed
+    maxMul: 2.4,            // speed multiplier at rampTime
+    knockdown: 2.0,         // seconds on the back
+    invuln: 1.0,            // seconds of safety after getting up
+    maxPile: 9999,
+    missesToFill: 220,      // missed acorns it takes to raise the ground to the canopy
+    maxLives: 3,            // golden acorns refill up to three, never beyond
+    goldChance: 0.03,       // chance that a spawned acorn is golden (after the tutorial)
+    goldMinGap: 15,         // seconds between golden acorns at least
+    goldStart: 10,          // no golden acorns in the first seconds of a run
+    rottenChance: 0.07,     // chance that a spawned acorn is rotten
+    rottenMinGap: 6,        // seconds between rotten acorns at least
+    rottenStart: 8,         // no rotten acorns in the first seconds of a run
+    slowTime: 3.0,          // seconds the squirrel is slowed after eating a rotten acorn
+    slowFactor: 0.3,        // how much of its normal speed it keeps while sick
+    sweepChance: 0.05,      // chance that a spawned acorn is a silver sweeper (clears half the litter)
+    sweepMinGap: 18,        // seconds between sweepers at least
+    sweepStart: 20,         // no sweepers in the first seconds of a run
+    sweepMinLitter: 8,      // a sweeper only shows up once there is something worth sweeping
+    tenChance: 0.035,       // chance that a spawned acorn is a ruby x10
+    tenMinGap: 16,          // seconds between ruby acorns at least
+    tenStart: 12            // no ruby acorns in the first seconds of a run
+  };
+
+  const state = {
+    mode: 'ready',          // 'ready' | 'playing' | 'paused' | 'gameover'
+    t: 0,
+    sx: 0, targetX: 0, vx: 0, facing: 1,
+    knocked: 0, invuln: 0,
+    lives: 3, pile: 0, ghost: 0, ghostBuried: false,
+    acorns: [], branches: [],
+    acornTimer: 0, branchTimer: 0,
+    keys: { left: false, right: false },
+    pointerDown: false,
+    tut: 0,                 // textless tutorial: 0 = first acorn pending, 1 = second pending, 2 = done
+    dance: 0,               // seconds of victory dance remaining
+    streak: 0,              // consecutive catches; drives the crunch pitch
+    litter: [],             // missed acorns lying on the ground: {fx, up, gold, rot}
+    rise: 0,                // how far the litter has lifted the ground, in px (eases toward riseTarget)
+    riseTarget: 0,          // where the litter says the ground should be
+    fx: [],                 // flying acorns for effects: swept litter floating off, x10 catches tossed to the pile
+    labelPop: 0,            // seconds of pop left on the pile number after a x10 catch
+    maxLives: 3,            // most lives held this run; sets how many hearts are shown
+    lastGold: -99,          // time the last golden acorn appeared
+    lastRotten: -99,        // time the last rotten acorn appeared
+    lastSweep: -99,         // time the last silver sweeper appeared
+    lastTen: -99,           // time the last ruby x10 appeared
+    slow: 0,                // seconds of stomach ache left after a rotten acorn
+    sparkle: 0,             // seconds of sparkle left after catching a golden acorn
+    runPhase: 0,            // leg animation phase
+    over: { t: 0, fromX: 0, shown: false, munched: false }
+  };
+
+  function speedMul() {
+    const k = Math.min(1, state.t / TUNE.rampTime);
+    return 1 + (TUNE.maxMul - 1) * k;
+  }
+
+  function readGhost() {
+    const q = new URLSearchParams(location.search);
+    const raw = parseInt(q.get('pile'), 10);
+    if (!isFinite(raw) || raw <= 0) return 0;
+    return Math.min(TUNE.maxPile, raw);
+  }
+
+  // Fresh run. `startNow` skips the start screen (used by the replay button).
+  function reset(startNow = false) {
+    state.mode = startNow ? 'playing' : 'ready';
+    state.t = 0;
+    state.sx = W * 0.4;
+    state.targetX = state.sx;
+    state.vx = 0;
+    state.facing = 1;
+    state.knocked = 0;
+    state.invuln = 0;
+    state.lives = 3;
+    state.pile = 0;
+    state.ghost = readGhost();
+    state.ghostBuried = false;
+    state.acorns.length = 0;
+    state.branches.length = 0;
+    state.acornTimer = 0.6;
+    state.branchTimer = TUNE.branchInterval * 1.3;
+    state.over.t = 0;
+    state.over.shown = false;
+    state.over.munched = false;
+    state.tut = 0;
+    state.dance = 0;
+    state.streak = 0;
+    state.litter.length = 0;
+    state.rise = 0;
+    state.riseTarget = 0;
+    state.fx.length = 0;
+    state.labelPop = 0;
+    state.lastSweep = -99;
+    state.lastTen = -99;
+    L.groundY = L.groundY0;
+    state.maxLives = 3;
+    state.lastGold = -99;
+    state.lastRotten = -99;
+    state.slow = 0;
+    state.sparkle = 0;
+    state.runPhase = 0;
+    linkbox.classList.remove('show');
+    shareBtn.classList.remove('ok');
+    if (startNow) SFX.music(true);
+    syncUI();
+  }
+
+  function startGame() {
+    if (state.mode !== 'ready' || !booted) return;   // the Start button only appears once the scene is built
+    state.mode = 'playing';
+    state.pointerDown = false;
+    SFX.music(true);
+    syncUI();
+  }
+  function pauseGame() {
+    if (state.mode !== 'playing') return;
+    state.mode = 'paused';
+    state.pointerDown = false;
+    state.keys.left = state.keys.right = false;
+    SFX.music(false);             // the tune stops with the game
+    syncUI();
+  }
+  function resumeGame() {
+    if (state.mode !== 'paused') return;
+    state.mode = 'playing';
+    state.targetX = state.sx;     // no lurch toward wherever the finger landed
+    SFX.music(true);
+    syncUI();
+  }
+
+  // Which buttons are on screen follows the mode: the splash with its Start
+  // button while ready, Resume while paused, share and replay at game over.
+  function syncUI() {
+    splash.classList.toggle('hide', state.mode !== 'ready');
+    center.classList.toggle('show', state.mode === 'paused');
+    pauseBtn.classList.toggle('show', state.mode === 'playing');
+    hud.classList.toggle('show', state.mode !== 'ready');
+    hud.classList.toggle('nopause', state.mode === 'gameover');
+    ui.classList.toggle('show', state.mode === 'gameover' && state.over.shown);
+  }
+
+  // ------------------------------------------------------------------
+  // Input
+  // ------------------------------------------------------------------
+  function pointerX(e) {
+    const r = canvas.getBoundingClientRect();
+    return e.clientX - r.left;
+  }
+  canvas.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    SFX.unlock();   // browsers only allow audio after a gesture
+    if (state.mode === 'ready') { startGame(); return; }
+    if (state.mode === 'paused') { resumeGame(); return; }
+    if (state.mode === 'gameover') {
+      if (state.over.shown) reset(true);
+      return;
+    }
+    state.pointerDown = true;
+    state.targetX = pointerX(e);
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!state.pointerDown || state.mode !== 'playing') return;
+    e.preventDefault();
+    state.targetX = pointerX(e);
+  });
+  const release = e => { state.pointerDown = false; };
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
+  canvas.addEventListener('lostpointercapture', release);
+
+  window.addEventListener('keydown', e => {
+    SFX.unlock();
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') state.keys.left = true;
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') state.keys.right = true;
+    if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+      if (state.mode === 'playing') pauseGame();
+      else if (state.mode === 'paused') resumeGame();
+      e.preventDefault();
+      return;
+    }
+    if (e.key === ' ') {
+      // Space is the one-key remote: start, pause, resume, play again.
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      if (state.mode === 'ready') startGame();
+      else if (state.mode === 'playing') pauseGame();
+      else if (state.mode === 'paused') resumeGame();
+      else if (state.mode === 'gameover' && state.over.shown) reset(true);
+      e.preventDefault();
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (state.mode === 'ready') startGame();
+      else if (state.mode === 'paused') resumeGame();
+      else if (state.mode === 'gameover' && state.over.shown) reset(true);
+      e.preventDefault();
+    }
+  });
+  window.addEventListener('keyup', e => {
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') state.keys.left = false;
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') state.keys.right = false;
+  });
+
+  // ------------------------------------------------------------------
+  // Share UI
+  // ------------------------------------------------------------------
+  const ui = document.getElementById('ui');
+  const center = document.getElementById('center');
+  const splash = document.getElementById('splash');
+  const startBtn = document.getElementById('startBtn');
+  const playBtn = document.getElementById('playBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  for (const b of [startBtn, playBtn, pauseBtn]) b.addEventListener('pointerdown', e => e.stopPropagation());
+  startBtn.addEventListener('click', e => { e.stopPropagation(); SFX.unlock(); startGame(); });
+  playBtn.addEventListener('click', e => { e.stopPropagation(); SFX.unlock(); resumeGame(); });
+  pauseBtn.addEventListener('click', e => { e.stopPropagation(); pauseGame(); });
+  // A focused button would swallow the next Space press, so buttons let go of focus after a click.
+  for (const b of document.querySelectorAll('button')) b.addEventListener('click', () => b.blur());
+
+  // Lives display. DOM is only touched when the number changes.
+  const hud = document.getElementById('hud');
+  const hearts = Array.from(document.querySelectorAll('#heartsStat .h'));
+  let hudLives = -1;
+  function updateHud() {
+    if (hudLives !== state.lives) {
+      // Filled hearts = lives remaining, hollow grey hearts = lives used.
+      // Hearts empty from the right so the remaining ones stay in place.
+      const losing = hudLives > state.lives;
+      const gaining = hudLives >= 0 && hudLives < state.lives;
+      hudLives = state.lives;
+      hearts.forEach((h, i) => {
+        const alive = i < state.lives;
+        h.textContent = alive ? '♥' : '♡';
+        h.classList.toggle('lost', !alive);
+        h.classList.remove('pop', 'gain');
+        if (losing && i === state.lives) { void h.offsetWidth; h.classList.add('pop'); }
+        if (gaining && i === state.lives - 1) { void h.offsetWidth; h.classList.add('gain'); }
+      });
+    }
+  }
+  const shareBtn = document.getElementById('shareBtn');
+  const replayBtn = document.getElementById('replayBtn');
+  const linkbox = document.getElementById('linkbox');
+  const linkInput = document.getElementById('linkInput');
+
+  function shareURL() {
+    return `${location.origin}${location.pathname}?pile=${Math.min(TUNE.maxPile, state.pile)}`;
+  }
+  async function share() {
+    const url = shareURL();
+    let ok = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+        ok = true;
+      }
+    } catch (_) { ok = false; }
+    if (ok) {
+      shareBtn.classList.add('ok');
+      shareBtn.textContent = '✅';
+      setTimeout(() => { shareBtn.textContent = '🔗'; shareBtn.classList.remove('ok'); }, 1400);
+    } else {
+      linkInput.value = url;
+      linkbox.classList.add('show');
+      linkInput.focus();
+      linkInput.select();
+    }
+  }
+  shareBtn.addEventListener('pointerdown', e => e.stopPropagation());
+  replayBtn.addEventListener('pointerdown', e => e.stopPropagation());
+  shareBtn.addEventListener('click', e => { e.stopPropagation(); share(); });
+  replayBtn.addEventListener('click', e => { e.stopPropagation(); SFX.unlock(); reset(true); });
+
+  // ------------------------------------------------------------------
+  // Sound: everything is synthesised with Web Audio, no files needed.
+  // SFX.play(name) is the only entry point so Day 3 sounds slot in here.
+  // ------------------------------------------------------------------
+  const SFX = (() => {
+    let ac = null, master = null, noiseBuf = null;
+
+    function unlock() {
+      if (!ac) {
+        try {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          ac = new AC();
+          master = ac.createGain();
+          master.gain.value = 0.8;
+          master.connect(ac.destination);
+        } catch (_) { ac = null; return; }
+      }
+      if (ac.state === 'suspended') ac.resume().catch(() => {});
+      applyMute();
+      startWind();
+      startMusic();
+    }
+
+    // Mute covers everything: music, wind and effects. Remembered between visits.
+    let muted = false;
+    try { muted = localStorage.getItem('hs-muted') === '1'; } catch (_) {}
+    function applyMute() {
+      if (master) master.gain.setTargetAtTime(muted ? 0 : 0.8, ac.currentTime, 0.03);
+    }
+    function toggleMute() {
+      muted = !muted;
+      try { localStorage.setItem('hs-muted', muted ? '1' : '0'); } catch (_) {}
+      applyMute();
+      return muted;
+    }
+
+    // Background music: an eight-bar loop in C pentatonic, scheduled a little
+    // ahead of time so it never stutters. Bass on the bar, a soft arpeggio on
+    // the eighths, and a simple melody on top. Runs as long as the page lives.
+    const MUSIC = {
+      bpm: 96,
+      bass:   [36, 33, 29, 31],                       // C2 A1 F1 G1, two bars each
+      chords: [[60, 67, 64], [57, 64, 60], [53, 60, 57], [55, 62, 59]],
+      arp:    [0, 1, 2, 1, 0, 2, 1, 2],               // chord-tone index per eighth
+      melody: [76, 79, 81, 79,  76, 74, 72, 0,
+               69, 72, 74, 76,  74, 72, 69, 0,
+               69, 72, 76, 74,  72, 69, 67, 0,
+               67, 74, 76, 74,  76, 74, 67, 0]
+    };
+    const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+    let music = null, musicOn = true;
+
+    function pluck(midi, t, vol, dur, dest) {
+      const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = mtof(midi);
+      const o2 = ac.createOscillator(); o2.type = 'triangle'; o2.frequency.value = mtof(midi);
+      const g = ac.createGain(), g2 = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      g2.gain.setValueAtTime(0.0001, t); g2.gain.exponentialRampToValueAtTime(vol * 0.35, t + 0.008); g2.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.6);
+      o.connect(g); g.connect(dest); o2.connect(g2); g2.connect(dest);
+      o.start(t); o.stop(t + dur + 0.05); o2.start(t); o2.stop(t + dur + 0.05);
+    }
+    function bassNote(midi, t, dur, dest) {
+      const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = mtof(midi);
+      const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 420;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(f); f.connect(g); g.connect(dest);
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+    function startMusic() {
+      if (music || !ac) return;
+      const bus = ac.createGain();
+      bus.gain.value = 0.28;
+      bus.connect(master);
+      music = { bus, beat: 0, next: ac.currentTime + 0.15, spb: 60 / MUSIC.bpm, timer: setInterval(scheduleMusic, 60) };
+    }
+    // Pause fades the tune out and stops scheduling; resume fades it back in
+    // from the next beat rather than replaying everything it missed.
+    function setMusic(on) {
+      musicOn = on;
+      if (!music) return;
+      music.bus.gain.setTargetAtTime(on ? 0.28 : 0, ac.currentTime, 0.06);
+      if (on) music.next = Math.max(music.next, ac.currentTime + 0.12);
+    }
+    function scheduleMusic() {
+      if (!music || !musicOn || ac.state !== 'running') return;
+      const spb = music.spb;
+      while (music.next < ac.currentTime + 0.45) {
+        const t = music.next;
+        const b = music.beat % 32, bar = Math.floor(b / 4), ci = Math.floor(bar / 2);
+        const chord = MUSIC.chords[ci];
+        if (b % 4 === 0) bassNote(MUSIC.bass[ci], t, spb * 3.6, music.bus);
+        const e = (b % 4) * 2;
+        pluck(chord[MUSIC.arp[e]] + 12, t, 0.09, spb * 0.9, music.bus);
+        pluck(chord[MUSIC.arp[e + 1]] + 12, t + spb / 2, 0.07, spb * 0.8, music.bus);
+        const m = MUSIC.melody[b];
+        if (m) pluck(m, t, 0.17, spb * 1.6, music.bus);
+        music.next += spb;
+        music.beat += 1;
+      }
+    }
+
+    // Wind: a looping band of noise whose level follows the speed ramp.
+    // It is the ambience, the difficulty meter, and the reason things fall.
+    let wind = null, windLevel = 0, windT = 0;
+    function startWind() {
+      if (wind || !ac) return;
+      try {
+        const src = ac.createBufferSource();
+        src.buffer = noise(); src.loop = true;
+        const f = ac.createBiquadFilter();
+        f.type = 'bandpass'; f.frequency.value = 380; f.Q.value = 0.6;
+        const g = ac.createGain();
+        g.gain.value = 0;
+        src.connect(f); f.connect(g); g.connect(master);
+        src.start();
+        wind = { src, f, g };
+      } catch (_) { wind = null; }
+    }
+    // level 0..1, called every frame; eases so changes never click.
+    function setWind(level, dt) {
+      if (!wind || ac.state !== 'running') return;
+      windT += dt;
+      windLevel += (level - windLevel) * Math.min(1, dt * 1.5);
+      const sway = 0.75 + 0.25 * Math.sin(windT * 0.9) * Math.sin(windT * 0.37 + 1);
+      const target = windLevel <= 0.001 ? 0.0001 : (0.025 + windLevel * 0.17) * sway;
+      wind.g.gain.setTargetAtTime(target, ac.currentTime, 0.08);
+      wind.f.frequency.setTargetAtTime(320 + windLevel * 520, ac.currentTime, 0.2);
+    }
+
+    function noise() {
+      if (noiseBuf) return noiseBuf;
+      const len = ac.sampleRate;
+      noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      return noiseBuf;
+    }
+
+    // A filtered noise burst with a fast attack and exponential decay.
+    function burst({ type = 'bandpass', freq = 1000, q = 1, vol = 0.5, dur = 0.08, delay = 0 }) {
+      const t = ac.currentTime + delay;
+      const src = ac.createBufferSource();
+      src.buffer = noise();
+      const f = ac.createBiquadFilter();
+      f.type = type; f.frequency.value = freq; f.Q.value = q;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f); f.connect(g); g.connect(master);
+      src.start(t); src.stop(t + dur + 0.05);
+    }
+
+    // A tone that glides through a list of [timeOffset, frequency] points.
+    function tone({ type = 'sine', points, vol = 0.4, dur, delay = 0, attack = 0.01 }) {
+      const t = ac.currentTime + delay;
+      const o = ac.createOscillator();
+      o.type = type;
+      o.frequency.setValueAtTime(points[0][1], t);
+      for (let i = 1; i < points.length; i++) o.frequency.exponentialRampToValueAtTime(points[i][1], t + points[i][0]);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(master);
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+
+    const lib = {
+      // Tiny dry crunch. `pitch` is a multiplier so Day 3 can climb a scale.
+      crunch(pitch = 1) {
+        burst({ freq: 1600 * pitch, q: 0.9, vol: 0.55, dur: 0.07 });
+        burst({ freq: 3800 * pitch, q: 1.2, vol: 0.25, dur: 0.045, delay: 0.012 });
+      },
+      // Branch lands on the squirrel.
+      thud() {
+        tone({ type: 'sine', points: [[0, 120], [0.18, 38]], vol: 0.9, dur: 0.24, attack: 0.004 });
+        burst({ type: 'lowpass', freq: 320, q: 0.7, vol: 0.6, dur: 0.14 });
+      },
+      // The squirrel's reaction, more pathetic with every life lost:
+      // 1 = surprised eek, 2 = longer whine, 3 = sad deflating squeak.
+      squeak(level = 1) {
+        if (level >= 3) {
+          tone({ type: 'triangle', points: [[0, 1000], [0.15, 1100], [0.5, 520], [0.9, 330]], vol: 0.3, dur: 0.95, delay: 0.15, attack: 0.03 });
+        } else if (level === 2) {
+          tone({ type: 'triangle', points: [[0, 1200], [0.12, 880], [0.26, 1080], [0.5, 680]], vol: 0.3, dur: 0.52, delay: 0.12, attack: 0.02 });
+        } else {
+          tone({ type: 'triangle', points: [[0, 1050], [0.07, 1750], [0.2, 820]], vol: 0.32, dur: 0.22, delay: 0.12 });
+        }
+      },
+      // A gust: swells just before a branch's shadow appears.
+      gust() {
+        const t = ac.currentTime;
+        const src = ac.createBufferSource();
+        src.buffer = noise();
+        const f = ac.createBiquadFilter();
+        f.type = 'bandpass'; f.Q.value = 0.8;
+        f.frequency.setValueAtTime(300, t);
+        f.frequency.exponentialRampToValueAtTime(950, t + 0.3);
+        f.frequency.exponentialRampToValueAtTime(420, t + 0.75);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.38, t + 0.28);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+        src.connect(f); f.connect(g); g.connect(master);
+        src.start(t); src.stop(t + 0.85);
+      },
+      // A crowd of squirrels cheering from the tree, with a rustle of leaves.
+      cheer() {
+        burst({ freq: 2600, q: 0.6, vol: 0.16, dur: 0.5 });
+        for (let i = 0; i < 9; i++) {
+          const f0 = 850 + Math.random() * 800;
+          tone({ type: 'triangle', points: [[0, f0], [0.06, f0 * 1.5], [0.15, f0 * 1.15]],
+                 vol: 0.11, dur: 0.17, delay: Math.random() * 1.0 });
+        }
+      },
+      // Contented munching as the squirrel settles on its pile.
+      // Golden acorn caught: a quick bright arpeggio.
+      chime() {
+        const notes = [880, 1108.7, 1318.5, 1760];
+        notes.forEach((f, i) => {
+          tone({ type: 'sine', points: [[0, f], [0.25, f]], vol: 0.22, dur: 0.32, delay: i * 0.07, attack: 0.005 });
+          tone({ type: 'triangle', points: [[0, f * 2], [0.2, f * 2]], vol: 0.06, dur: 0.2, delay: i * 0.07, attack: 0.005 });
+        });
+      },
+      // An acorn bouncing on the ground: a small dry tap, quieter each hop.
+      tap(vol = 1) {
+        burst({ type: 'lowpass', freq: 900, q: 0.8, vol: 0.22 * vol, dur: 0.05 });
+      },
+      // Rotten acorn eaten: a queasy wobble and a burble.
+      blegh() {
+        tone({ type: 'sawtooth', points: [[0, 300], [0.12, 220], [0.3, 260], [0.55, 140]], vol: 0.16, dur: 0.6, attack: 0.02 });
+        for (let i = 0; i < 3; i++) burst({ type: 'lowpass', freq: 380, q: 1.2, vol: 0.25, dur: 0.09, delay: 0.1 + i * 0.13 });
+      },
+      // Silver sweeper: a rising whoosh as the litter lifts off, then a bright chime.
+      sweep() {
+        for (let i = 0; i < 6; i++) burst({ type: 'bandpass', freq: 600 + i * 350, q: 1.4, vol: 0.28, dur: 0.14, delay: i * 0.05 });
+        tone({ type: 'sine', points: [[0, 523], [0.35, 1046]], vol: 0.18, dur: 0.5, delay: 0.25, attack: 0.02 });
+        tone({ type: 'sine', points: [[0, 1568], [0.3, 1568]], vol: 0.14, dur: 0.4, delay: 0.5, attack: 0.01 });
+      },
+      // Ruby x10: a quick fanfare.
+      jackpot() {
+        const notes = [659, 784, 988, 1319, 1568];
+        notes.forEach((f, i) => {
+          tone({ type: 'square', points: [[0, f], [0.2, f]], vol: 0.09, dur: 0.22, delay: i * 0.06, attack: 0.005 });
+          tone({ type: 'sine', points: [[0, f], [0.3, f]], vol: 0.2, dur: 0.3, delay: i * 0.06, attack: 0.005 });
+        });
+        tone({ type: 'triangle', points: [[0, 1319], [0.6, 1319]], vol: 0.12, dur: 0.7, delay: 0.3, attack: 0.02 });
+      },
+      munch() {
+        for (let i = 0; i < 4; i++) {
+          burst({ type: 'lowpass', freq: 520, q: 0.8, vol: 0.45 - i * 0.07, dur: 0.1, delay: 0.3 + i * 0.19 });
+        }
+        tone({ type: 'sine', points: [[0, 215], [0.9, 180]], vol: 0.1, dur: 1.0, delay: 0.3, attack: 0.15 });
+      }
+    };
+
+    function play(name, arg) {
+      if (!ac || ac.state !== 'running') return;
+      try { lib[name](arg); } catch (_) { /* sound is never worth a crash */ }
+    }
+
+    return { unlock, play, wind: setWind, music: setMusic, toggleMute, isMuted: () => muted };
+  })();
+
+  // Mute button: top-right, shown in every mode.
+  const muteBtn = document.getElementById('muteBtn');
+  muteBtn.textContent = SFX.isMuted() ? '🔇' : '🔊';
+  muteBtn.addEventListener('pointerdown', e => e.stopPropagation());
+  muteBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    SFX.unlock();
+    muteBtn.textContent = SFX.toggleMute() ? '🔇' : '🔊';
+  });
+
+  // ------------------------------------------------------------------
+  // Spawning
+  // ------------------------------------------------------------------
+  function spawnAcorn() {
+    const m = L.acornR * 2;
+    let x = m + Math.random() * (L.trunkX - m * 2);
+    // Textless tutorial: the first acorn lands on the squirrel for free,
+    // the second falls one thumb-width to the side so the player drags by reflex.
+    if (state.tut === 0) {
+      x = state.sx;
+      state.tut = 1;
+    } else if (state.tut === 1) {
+      const side = state.sx > W * 0.5 ? -1 : 1;
+      x = Math.max(m, Math.min(L.trunkX - m, state.sx + side * L.S * 1.1));
+      state.tut = 2;
+    }
+    // A rare golden acorn restores a life. Never during the tutorial, never
+    // too early, never two close together, and never when already at the cap.
+    const gold = state.tut === 2
+      && state.t > TUNE.goldStart
+      && state.t - state.lastGold > TUNE.goldMinGap
+      && state.lives < TUNE.maxLives
+      && Math.random() < TUNE.goldChance;
+    if (gold) state.lastGold = state.t;
+    // A rotten acorn looks almost right but gives the squirrel a stomach ache.
+    const rotten = !gold && state.tut === 2
+      && state.t > TUNE.rottenStart
+      && state.t - state.lastRotten > TUNE.rottenMinGap
+      && Math.random() < TUNE.rottenChance;
+    if (rotten) state.lastRotten = state.t;
+    // A silver sweeper clears half the litter and lets the ground back down.
+    const sweep = !gold && !rotten && state.tut === 2
+      && state.t > TUNE.sweepStart
+      && state.t - state.lastSweep > TUNE.sweepMinGap
+      && state.litter.length >= TUNE.sweepMinLitter
+      && Math.random() < TUNE.sweepChance;
+    if (sweep) state.lastSweep = state.t;
+    // A ruby acorn is worth ten.
+    const ten = !gold && !rotten && !sweep && state.tut === 2
+      && state.t > TUNE.tenStart
+      && state.t - state.lastTen > TUNE.tenMinGap
+      && Math.random() < TUNE.tenChance;
+    if (ten) state.lastTen = state.t;
+    const special = gold || sweep || ten;
+    state.acorns.push({
+      x,
+      y: -L.acornR * 2,
+      vy: TUNE.acornSpeed * H * speedMul() * (special ? 0.78 : 0.9 + Math.random() * 0.25),
+      rot: Math.random() * Math.PI * 2,
+      spin: special ? 0.6 : (Math.random() - 0.5) * 3,
+      gold,
+      rotten,
+      sweep,
+      ten,
+      baseX: x,
+      wob: Math.random() * Math.PI * 2   // golden acorns drift side to side
+    });
+  }
+  function spawnBranch() {
+    const half = L.branchW / 2;
+    const landX = half + Math.random() * (L.trunkX - half * 2);
+    const vy = TUNE.branchSpeed * H * speedMul();
+    // Start high enough that the shadow gives a fair lead time.
+    const startY = -(vy * 1.6);
+    state.branches.push({ x: landX, y: startY, vy, startY });
+    SFX.play('gust');   // gust first, then look up
+  }
+
+  // ------------------------------------------------------------------
+  // Update
+  // ------------------------------------------------------------------
+  function squirrelBox() {
+    const w = L.SQ * 0.62, h = L.SQ * 0.78;
+    return { x: state.sx - w / 2, y: L.groundY - h, w, h };
+  }
+  // Branches only count when they hit the body itself, not the fluffy edges:
+  // the bigger squirrel is no easier to knock down than the old one.
+  function hurtBox() {
+    const w = L.S * 0.62, h = L.SQ * 0.78;
+    return { x: state.sx - w / 2, y: L.groundY - h, w, h };
+  }
+  function overlaps(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  function update(dt) {
+    // Wind follows the speed ramp while playing and dies away at game over.
+    SFX.wind(state.mode === 'playing' ? (speedMul() - 1) / (TUNE.maxMul - 1) : 0, dt);
+
+    // The background keeps breathing except while paused.
+    if (state.mode !== 'paused') updateBackground(dt);
+
+    // Start screen and pause: the world holds still.
+    if (state.mode === 'ready' || state.mode === 'paused') return;
+
+    if (state.mode === 'gameover') {
+      state.over.t += dt;
+      // Walk to the pile and sit down on it.
+      const target = L.pileX;
+      const k = Math.min(1, state.over.t / 1.1);
+      const ease = 1 - Math.pow(1 - k, 3);
+      state.sx = state.over.fromX + (target - state.over.fromX) * ease;
+      state.facing = target > state.over.fromX ? 1 : -1;
+      // Let falling things finish falling, no catching.
+      for (const a of state.acorns) a.y += a.vy * dt;
+      for (const b of state.branches) b.y += b.vy * dt;
+      state.acorns = state.acorns.filter(a => a.y < L.groundY + L.acornR * 3);
+      state.branches = state.branches.filter(b => b.y < L.groundY + L.branchH);
+      if (!state.over.munched && state.over.t > 1.0) {
+        state.over.munched = true;
+        SFX.play('munch');
+      }
+      if (!state.over.shown && state.over.t > 1.3) {
+        state.over.shown = true;
+        syncUI();
+      }
+      return;
+    }
+
+    state.t += dt;
+    const mul = speedMul();
+
+    // A rotten acorn leaves the squirrel sluggish for a few seconds.
+    if (state.slow > 0) state.slow -= dt;
+    const slowK = state.slow > 0 ? TUNE.slowFactor : 1;
+
+    // Keyboard steering moves the target.
+    if (state.keys.left !== state.keys.right) {
+      const dir = state.keys.left ? -1 : 1;
+      state.targetX += dir * TUNE.keySpeed * slowK * W * dt;
+    }
+    const half = L.S * 0.35;   // same running room as before; the bigger body may brush the trunk
+    state.targetX = Math.max(half, Math.min(L.trunkX - half, state.targetX));
+
+    // Follow lag: ease toward the target, frame-rate independent.
+    if (state.knocked <= 0) {
+      const prev = state.sx;
+      const alpha = 1 - Math.exp(-TUNE.followLag * slowK * dt);
+      state.sx += (state.targetX - state.sx) * alpha;
+      state.vx = (state.sx - prev) / Math.max(dt, 1e-4);
+      if (Math.abs(state.vx) > 12) state.facing = state.vx > 0 ? 1 : -1;
+      state.runPhase += Math.min(Math.abs(state.vx), L.S * 8) / L.S * dt * 2.2;
+    } else {
+      state.knocked -= dt;
+      if (state.knocked <= 0) {
+        state.knocked = 0;
+        state.invuln = TUNE.invuln;
+        state.targetX = state.sx; // don't lurch after getting up
+      }
+    }
+    if (state.invuln > 0) state.invuln -= dt;
+    if (state.dance > 0) state.dance -= dt;
+    if (state.sparkle > 0) state.sparkle -= dt;
+    if (state.labelPop > 0) state.labelPop -= dt;
+    updateFx(dt);
+
+    // Timers
+    state.acornTimer -= dt;
+    if (state.acornTimer <= 0) {
+      spawnAcorn();
+      state.acornTimer = (TUNE.acornInterval / mul) * (0.75 + Math.random() * 0.5);
+    }
+    state.branchTimer -= dt;
+    if (state.branchTimer <= 0) {
+      spawnBranch();
+      state.branchTimer = (TUNE.branchInterval / Math.sqrt(mul)) * (0.8 + Math.random() * 0.5);
+    }
+
+    // Acorns
+    const box = squirrelBox();
+    const catchBox = state.knocked > 0 ? null : {
+      x: box.x - L.SQ * 0.08, y: box.y - L.SQ * 0.1, w: box.w + L.SQ * 0.16, h: box.h * 0.75
+    };
+    // While knocked down the squirrel lies flat; acorns that land on it bounce off.
+    const bellyBox = state.knocked > 0 ? {
+      x: state.sx - L.SQ * 0.48, y: L.groundY - L.SQ * 0.46, w: L.SQ * 0.96, h: L.SQ * 0.46
+    } : null;
+    for (let i = state.acorns.length - 1; i >= 0; i--) {
+      const a = state.acorns[i];
+      if (a.bounced) {
+        a.vy += H * 1.1 * dt;          // only bounced acorns feel gravity
+        a.x += a.vx * dt;
+      } else if (a.gold || a.sweep || a.ten) {
+        a.wob += dt * 2.4;
+        a.x = a.baseX + Math.sin(a.wob) * L.S * 0.32;
+      }
+      a.y += a.vy * dt;
+      a.rot += a.spin * dt;
+      const ar = (a.gold || a.sweep || a.ten) ? L.acornR * 1.3 : L.acornR;   // special ones are bigger and a touch more forgiving
+      const ab = { x: a.x - ar, y: a.y - ar, w: ar * 2, h: ar * 2 };
+      if (!a.bounced && catchBox && overlaps(ab, catchBox)) {
+        state.acorns.splice(i, 1);
+        if (a.rotten) {
+          // Stomach ache: slow for a while, streak gone, nothing for the pile.
+          state.slow = TUNE.slowTime;
+          state.streak = 0;
+          SFX.play('blegh');
+          continue;
+        }
+        state.pile = Math.min(TUNE.maxPile, state.pile + 1);
+        state.streak += 1;
+        if (a.gold) {
+          state.lives = Math.min(TUNE.maxLives, state.lives + 1);
+          state.maxLives = Math.max(state.maxLives, state.lives);
+          state.sparkle = 0.8;
+          SFX.play('chime');
+        }
+        if (a.sweep) sweepLitter();
+        if (a.ten) tossTen();
+        // Each catch in a row climbs a semitone; a miss resets the scale.
+        SFX.play('crunch', Math.pow(2, Math.min(state.streak - 1, 14) / 12));
+        if (state.ghost > 0 && !state.ghostBuried && state.pile > state.ghost) {
+          state.ghostBuried = true;
+          state.dance = 1.1;   // victory dance, play continues underneath
+          SFX.play('cheer');
+        }
+        continue;
+      }
+      if (!a.bounced && bellyBox && a.vy > 0 && overlaps(ab, bellyBox)) {
+        a.bounced = true;
+        a.vy = -Math.abs(a.vy) * 0.5;
+        a.vx = (a.x < state.sx ? -1 : 1) * L.S * (1.2 + Math.random() * 1.2);
+        a.spin = (Math.random() - 0.5) * 12;
+        continue;
+      }
+      if (a.x < -L.S || a.x > W + L.S) {
+        state.acorns.splice(i, 1);
+        if (!a.rotten) missAcorn(a);
+        continue;
+      }
+      if (a.y > L.groundY - L.acornR * 0.4) {
+        if (a.rotten) { state.acorns.splice(i, 1); continue; }   // squish, gone, no harm done
+        const hops = a.hops || 0;
+        if (hops < 2 && a.vy > H * 0.12) {
+          // Bounce: up and a little sideways, each hop smaller than the last.
+          if (hops === 0) state.streak = 0;                        // the miss happened here
+          a.y = L.groundY - L.acornR * 0.4;
+          a.vy = -a.vy * 0.55;
+          a.vx = (a.vx || 0) * 0.5 + (Math.random() - 0.5) * L.S * 1.4;
+          a.spin = (Math.random() - 0.5) * 10;
+          a.bounced = true;                                        // gravity on, catching off
+          a.hops = hops + 1;
+          SFX.play('tap', 1 - hops * 0.35);
+        } else {
+          state.acorns.splice(i, 1);
+          if (hops === 0) state.streak = 0;
+          missAcorn(a);          // it stays on the ground, and the ground creeps up
+        }
+      }
+    }
+    settleGround(dt);
+
+    // Branches
+    const hurt = hurtBox();
+    for (let i = state.branches.length - 1; i >= 0; i--) {
+      const b = state.branches[i];
+      b.y += b.vy * dt;
+      const bb = { x: b.x - L.branchW / 2, y: b.y - L.branchH / 2, w: L.branchW, h: L.branchH };
+      if (state.knocked <= 0 && state.invuln <= 0 && overlaps(bb, hurt)) {
+        state.branches.splice(i, 1);
+        hit();
+        continue;
+      }
+      if (b.y - L.branchH / 2 > L.groundY) state.branches.splice(i, 1);
+    }
+  }
+
+  // A missed acorn lies where it fell. Positions are stored as fractions so a
+  // resize keeps the litter in place.
+  function missAcorn(a) {
+    const x = Math.max(L.acornR, Math.min(W - L.acornR, a.x));
+    state.litter.push({ fx: x / W, up: L.groundY0 - L.groundY + L.acornR * 0.15, gold: !!a.gold, rot: (Math.random() - 0.5) * 1.2 });
+  }
+
+  // The litter lifts the ground. When the squirrel would touch the canopy, it's buried.
+  function groundLimit() { return L.canopyY + BG.r * 0.65 + L.SQ * 1.05; }
+  function settleGround(dt) {
+    const maxRise = Math.max(0, L.groundY0 - groundLimit());
+    state.riseTarget = Math.min(maxRise, state.litter.length * (maxRise / TUNE.missesToFill));
+    // The surface eases toward where the litter puts it, so a sweep sinks it smoothly.
+    const d = state.riseTarget - state.rise;
+    state.rise = Math.abs(d) < 0.05 ? state.riseTarget : state.rise + d * Math.min(1, dt * 6);
+    L.groundY = L.groundY0 - state.rise;
+    if (state.mode === 'playing' && state.riseTarget >= maxRise - 0.01) buried();
+  }
+
+  // Silver sweeper caught: every other acorn in the litter floats away, so
+  // the heap halves and the ground sinks back down.
+  function sweepLitter() {
+    const n = state.litter.length;
+    if (n === 0) { SFX.play('sweep'); return; }
+    const keep = [], gone = [];
+    for (let i = 0; i < n; i++) ((n === 1 || i % 2) ? gone : keep).push(state.litter[i]);
+    state.litter.length = 0;
+    for (const lt of keep) state.litter.push(lt);
+    for (let i = 0; i < gone.length; i++) {
+      const lt = gone[i];
+      state.fx.push({
+        kind: 'poof', gold: lt.gold,
+        x: lt.fx * W, y: L.groundY - L.acornR * 0.8,
+        vx: (Math.random() - 0.5) * L.S * 2.2, vy: -(L.S * 3.5 + Math.random() * L.S * 4),
+        rot: lt.rot, spin: (Math.random() - 0.5) * 14,
+        t: -Math.min(0.5, i * 0.012), life: 0.9 + Math.random() * 0.5
+      });
+    }
+    state.sparkle = 0.8;
+    SFX.play('sweep');
+  }
+
+  // Ruby acorn caught: ten more on the pile, tossed over one after another.
+  function tossTen() {
+    state.pile = Math.min(TUNE.maxPile, state.pile + 10);
+    state.streak += 10;
+    state.sparkle = 0.8;
+    SFX.play('jackpot');
+    for (let i = 0; i < 10; i++) {
+      state.fx.push({
+        kind: 'toss', gold: false,
+        x: state.sx, y: L.groundY - L.SQ * 0.7,
+        tx: L.pileX + (Math.random() - 0.5) * L.S * 0.6, ty: L.groundY - pileRadius(state.pile) * 0.9,
+        arc: L.S * (2.2 + Math.random() * 1.2),
+        rot: Math.random() * 6, spin: (Math.random() - 0.5) * 10,
+        t: -i * 0.07, life: 0.55
+      });
+    }
+  }
+
+  // Effect acorns: swept litter floats up and shrinks away; tossed ones arc to the pile.
+  function updateFx(dt) {
+    for (let i = state.fx.length - 1; i >= 0; i--) {
+      const f = state.fx[i];
+      f.t += dt;
+      if (f.t < 0) continue;
+      f.rot += f.spin * dt;
+      if (f.kind === 'poof') {
+        f.vy += H * 0.35 * dt;      // a light pull so they drift rather than shoot
+        f.x += f.vx * dt;
+        f.y += f.vy * dt;
+      }
+      if (f.t >= f.life) {
+        state.fx.splice(i, 1);
+        if (f.kind === 'toss') { state.labelPop = 0.35; SFX.play('tap', 0.8); }
+      }
+    }
+  }
+  function buried() {
+    state.mode = 'gameover';
+    state.over.t = 0;
+    state.over.fromX = state.sx;
+    state.knocked = 0;
+    state.dance = 0;
+    SFX.play('squeak', 3);
+  }
+
+  function hit() {
+    state.lives -= 1;
+    state.dance = 0;
+    state.streak = 0;
+    SFX.play('thud');
+    SFX.play('squeak', 3 - Math.max(0, state.lives));
+    if (state.lives <= 0) {
+      state.lives = 0;
+      state.mode = 'gameover';
+      state.over.t = 0;
+      state.over.fromX = state.sx;
+      state.knocked = 0;
+      return;
+    }
+    state.knocked = TUNE.knockdown;
+  }
+
+  // ------------------------------------------------------------------
+  // Drawing: a Three.js scene. All the game logic above still thinks in
+  // 2D screen pixels. The renderer maps a pixel (px, py) on the play
+  // plane to the world point (px - W/2, groundY0 - py, 0) and the camera
+  // sees that plane exactly 1:1, so controls, hitboxes and the tutorial
+  // are untouched while everything gets depth, lighting and shadows.
+  // ------------------------------------------------------------------
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  const C = {};
+  function cacheColors() {
+    for (const k of ['sky-top', 'sky-bottom', 'ground', 'ground-dark', 'trunk', 'trunk-dark', 'leaf', 'leaf-dark', 'pile', 'pile-dark']) {
+      C[k] = css('--' + k);
+    }
+  }
+
+  // A transparent 2D canvas on top of the 3D view carries the text: pile numbers and GAME OVER.
+  const overlay = document.getElementById('overlay');
+  const octx = overlay.getContext('2d');
+
+  const FUR = '#d9803a', FUR_DARK = '#b5602a', FUR_LIGHT = '#efa964',
+        BELLY = '#f7d9b0', INK = '#3b2314', PINK = '#f2a68e';
+
+  const X = px => px - W / 2;            // screen x -> world x on the play plane
+  const Y = py => L.groundY0 - py;       // screen y -> world y (up), real ground at 0
+  const hash = k => { const x = Math.sin(k * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); };
+
+  const FOV = 38;
+  let renderer = null, scene = null, camera = null, sun = null, hemi = null;
+  let camD = 1000, camY = 0, frameDt = 1 / 60;
+  let GEO = null, MAT = null, TEX = null;
+  const R3 = {
+    groups: [], acorns: new Map(), branches: new Map(), seen: new Set(),
+    leaves: [], peekers: [], limbs: [], clusters: [], hang: [], clouds: [],
+    faceK: 1, sq: null, sparkle: null, pile: null, ghostPile: null, litter: null, slab: null
+  };
+
+  // A group whose local coordinates are play-plane pixels, pushed back to
+  // depth z and scaled so it still lines up with the 2D layout on screen.
+  function depthGroup(z) {
+    const g = new THREE.Group();
+    g.userData.z = z;
+    scene.add(g);
+    R3.groups.push(g);
+    return g;
+  }
+  function placeDepth(g) {
+    const k = (camD - g.userData.z) / camD;
+    g.scale.setScalar(k);
+    g.position.set(0, camY * (1 - k), g.userData.z);
+  }
+
+  // Small builders so the characters read like the 2D art: balls and rods.
+  function std(color, o) { return new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.9, metalness: 0 }, o || {})); }
+  function ball(parent, material, x, y, z, rx, ry = rx, rz = rx, geo = GEO.sphere) {
+    const m = new THREE.Mesh(geo, material);
+    m.position.set(x, y, z);
+    m.scale.set(rx, ry, rz);
+    m.castShadow = true;
+    parent.add(m);
+    return m;
+  }
+  const _up = new THREE.Vector3(0, 1, 0), _dir = new THREE.Vector3();
+  function setRod(m, ax, ay, az, bx, by, bz, r) {
+    _dir.set(bx - ax, by - ay, bz - az);
+    const len = _dir.length();
+    m.position.set((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2);
+    m.scale.set(r, len, r);
+    m.quaternion.setFromUnitVectors(_up, _dir.normalize());
+    return m;
+  }
+  function rod(parent, material, ax, ay, az, bx, by, bz, r, geo = GEO.cyl) {
+    const m = new THREE.Mesh(geo, material);
+    setRod(m, ax, ay, az, bx, by, bz, r);
+    m.castShadow = true;
+    parent.add(m);
+    return m;
+  }
+  function makeTex(paint, size = 256, repeat = true) {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    paint(c.getContext('2d'), size);
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    return t;
+  }
+
+  function makeAssets() {
+    GEO = {
+      sphere: new THREE.SphereGeometry(1, 18, 12),
+      low: new THREE.SphereGeometry(1, 9, 7),
+      ico: new THREE.IcosahedronGeometry(1, 1),
+      cyl: new THREE.CylinderGeometry(1, 1, 1, 10),
+      taper: new THREE.CylinderGeometry(0.42, 1, 1, 10),
+      disc: new THREE.CircleGeometry(1, 28),
+      dome: new THREE.SphereGeometry(1, 26, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+      acornBody: new THREE.SphereGeometry(1, 20, 14).scale(1, 1.08, 1),
+      acornCap: new THREE.SphereGeometry(1, 20, 12).scale(0.9, 0.5, 0.9).translate(0, 0.55, 0),
+      acornRim: new THREE.TorusGeometry(0.9, 0.07, 8, 28).rotateX(Math.PI / 2).translate(0, 0.5, 0),
+      acornTip: new THREE.SphereGeometry(1, 10, 8).scale(0.2, 0.17, 0.2).translate(0, -0.98, 0),
+      box: new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
+      plane: new THREE.PlaneGeometry(1, 1)
+    };
+    // Procedural textures: no image files, just a few strokes on a canvas.
+    TEX = {
+      grass: makeTex((g, n) => {
+        g.fillStyle = C['ground']; g.fillRect(0, 0, n, n);
+        const cols = ['#5f9a42', '#7fb85a', '#62a048', C['ground-dark']];
+        for (let i = 0; i < 2600; i++) {
+          g.strokeStyle = cols[i & 3]; g.lineWidth = 1 + Math.random() * 1.5;
+          const x = Math.random() * n, y = Math.random() * n;
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x + (Math.random() - 0.5) * 4, y - 3 - Math.random() * 7); g.stroke();
+        }
+      }),
+      bark: makeTex((g, n) => {
+        g.fillStyle = C['trunk']; g.fillRect(0, 0, n, n);
+        for (let i = 0; i < 90; i++) {
+          g.strokeStyle = i % 3 ? C['trunk-dark'] : '#93602f';
+          g.lineWidth = 2 + Math.random() * 5; g.globalAlpha = 0.45 + Math.random() * 0.5;
+          const x = Math.random() * n;
+          g.beginPath(); g.moveTo(x, -10);
+          for (let y = 0; y <= n + 10; y += 24) g.lineTo(x + Math.sin(y * 0.05 + i) * 5, y);
+          g.stroke();
+        }
+      }),
+      heap: makeTex((g, n) => {
+        g.fillStyle = '#7d5433'; g.fillRect(0, 0, n, n);
+        for (let i = 0; i < 420; i++) {
+          const r = 5 + Math.random() * 7, x = Math.random() * n, y = Math.random() * n;
+          g.fillStyle = '#8a5a2b'; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+          g.fillStyle = '#5e3b19'; g.beginPath(); g.arc(x, y - r * 0.4, r * 0.78, Math.PI, 0); g.fill();
+        }
+      }),
+      // Acorn skin: a scaly cap and a faintly grained shell. Light bases so the material colour shows through.
+      scales: makeTex((g, n) => {
+        g.fillStyle = '#efe2d0'; g.fillRect(0, 0, n, n);
+        const sz = n / 8;
+        for (let row = 0; row < 12; row++) {
+          for (let col = -1; col < 10; col++) {
+            const x = col * sz + (row % 2) * sz / 2, y = row * sz * 0.6;
+            g.fillStyle = (row + col) % 2 ? '#dcc6ac' : '#e6d3bd';
+            g.beginPath(); g.arc(x, y, sz * 0.55, 0, Math.PI); g.fill();
+            g.strokeStyle = 'rgba(70,40,15,0.75)'; g.lineWidth = n * 0.014;
+            g.beginPath(); g.arc(x, y, sz * 0.55, 0, Math.PI); g.stroke();
+          }
+        }
+      }, 128),
+      grain: makeTex((g, n) => {
+        g.fillStyle = '#f3e7d9'; g.fillRect(0, 0, n, n);
+        for (let i = 0; i < 70; i++) {
+          g.strokeStyle = i % 2 ? 'rgba(90,50,20,0.16)' : 'rgba(255,245,230,0.3)';
+          g.lineWidth = 1 + Math.random() * 3;
+          const x = Math.random() * n;
+          g.beginPath(); g.moveTo(x, -4); g.lineTo(x + (Math.random() - 0.5) * 8, n + 4); g.stroke();
+        }
+      }, 128),
+      halo: makeTex((g, n) => {
+        const rg = g.createRadialGradient(n / 2, n / 2, n * 0.1, n / 2, n / 2, n / 2);
+        rg.addColorStop(0, 'rgba(255,220,90,1)'); rg.addColorStop(1, 'rgba(255,220,90,0)');
+        g.fillStyle = rg; g.fillRect(0, 0, n, n);
+      }, 128, false),
+      star: makeTex((g, n) => {
+        g.strokeStyle = '#fff'; g.lineWidth = n * 0.09; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(n / 2, n * 0.08); g.lineTo(n / 2, n * 0.92); g.moveTo(n * 0.08, n / 2); g.lineTo(n * 0.92, n / 2); g.stroke();
+      }, 64, false),
+      // The "x10" tag that floats over a ruby acorn.
+      tenTag: makeTex((g, n) => {
+        g.font = `900 ${n * 0.42}px "Segoe UI", system-ui, -apple-system, Roboto, sans-serif`;
+        g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+        g.lineWidth = n * 0.1; g.strokeStyle = '#7a0a08';
+        g.strokeText('\u00d710', n / 2, n / 2);
+        g.fillStyle = '#fff'; g.fillText('\u00d710', n / 2, n / 2);
+      }, 256, false)
+    };
+    TEX.heapFront = TEX.heap.clone(); TEX.heapFront.needsUpdate = true;
+    TEX.heapSide = TEX.heap.clone(); TEX.heapSide.needsUpdate = true;
+    MAT = {
+      fur: std(FUR), furDark: std(FUR_DARK), furLight: std(FUR_LIGHT), belly: std(BELLY),
+      ink: std(INK, { roughness: 0.45 }), pink: std(PINK), white: std('#ffffff', { roughness: 0.35 }),
+      cheek: std('#f1c08f'), sweat: std('#7fc7ff', { roughness: 0.25 }),
+      acorn: std('#9c6633', { map: TEX.grain, bumpMap: TEX.grain, bumpScale: 0.5, roughness: 0.5 }),
+      cap: std('#6b4522', { map: TEX.scales, bumpMap: TEX.scales, bumpScale: 1.4, roughness: 0.8 }),
+      gold: std('#f5c43e', { map: TEX.grain, metalness: 0.7, roughness: 0.25, emissive: '#b87a06', emissiveIntensity: 0.35 }),
+      goldCap: std('#c07a12', { map: TEX.scales, bumpMap: TEX.scales, bumpScale: 1.2, metalness: 0.55, roughness: 0.35 }),
+      rotten: std('#8f9a4c', { map: TEX.grain, roughness: 0.6 }), rottenCap: std('#5c6630', { map: TEX.scales, bumpMap: TEX.scales, bumpScale: 1.2 }), mould: std('#3f4620'),
+      stink: std('#8fa050', { transparent: true, opacity: 0.45 }),
+      silver: std('#eaf2fc', { map: TEX.grain, metalness: 0.45, roughness: 0.28, emissive: '#6fb4ff', emissiveIntensity: 0.35 }),
+      silverCap: std('#9ab8d6', { map: TEX.scales, bumpMap: TEX.scales, bumpScale: 1.2, metalness: 0.4, roughness: 0.35, emissive: '#2a5a8a', emissiveIntensity: 0.2 }),
+      ring: new THREE.MeshBasicMaterial({ color: '#cfefff', transparent: true, opacity: 0.85 }),
+      ruby: std('#d8342c', { map: TEX.grain, metalness: 0.35, roughness: 0.25, emissive: '#7a0a08', emissiveIntensity: 0.4 }),
+      rubyCap: std('#6e1f1a', { map: TEX.scales, bumpMap: TEX.scales, bumpScale: 1.2, metalness: 0.3, roughness: 0.4 }),
+      leaf: std(C['leaf'], { flatShading: true }), leafDark: std(C['leaf-dark'], { flatShading: true }),
+      leafDeep: std('#276a2e', { flatShading: true }),
+      bark: std(C['trunk'], { map: TEX.bark }), branch: std('#6b3f1d', { map: TEX.bark }),
+      grass: std(C['ground'], { map: TEX.grass }),
+      heap: std('#7d5433', { map: TEX.heap }),
+      heapTop: std('#ffffff', { map: TEX.heap }), heapFront: std('#ffffff', { map: TEX.heapFront }), heapSide: std('#ffffff', { map: TEX.heapSide }),
+      litter: std('#ffffff', { map: TEX.grain, roughness: 0.55 }), litterCap: std('#ffffff', { map: TEX.scales, bumpMap: TEX.scales, bumpScale: 1.2 }),
+      ghost: new THREE.MeshStandardMaterial({ color: '#8c8c8c', transparent: true, opacity: 0.35, roughness: 1 }),
+      ghostWire: new THREE.MeshBasicMaterial({ color: '#505050', wireframe: true, transparent: true, opacity: 0.22 }),
+      cloud: std('#ffffff', { emissive: '#ffffff', emissiveIntensity: 0.45, roughness: 1 }),
+      hillNear: std('#5f9a44', { flatShading: true }), hillFar: std('#6fa65a', { flatShading: true }),
+      blobFaint: new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.24, depthWrite: false }),
+      halo: new THREE.SpriteMaterial({ map: TEX.halo, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.5 }),
+      haloBlue: new THREE.SpriteMaterial({ map: TEX.halo, color: '#5fb8ff', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.5 }),
+      haloRed: new THREE.SpriteMaterial({ map: TEX.halo, color: '#ff6a5a', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.45 }),
+      tenTag: new THREE.SpriteMaterial({ map: TEX.tenTag, transparent: true, depthWrite: false, opacity: 1 }),
+      star: new THREE.SpriteMaterial({ map: TEX.star, transparent: true, depthWrite: false, opacity: 0.9 }),
+      sparkA: new THREE.MeshBasicMaterial({ color: '#ffd84a', transparent: true }),
+      sparkB: new THREE.MeshBasicMaterial({ color: '#fff4bf', transparent: true })
+    };
+  }
+
+  function initScene() {
+    try {
+      if (!window.THREE) throw new Error('no three');
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
+    } catch (e) { renderer = null; }
+    if (!renderer) {
+      document.body.insertAdjacentHTML('beforeend', '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font:600 20px system-ui;color:#3b2314;background:#eaf7ff">This game needs WebGL.</div>');
+      return;
+    }
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(new THREE.Color(C['sky-bottom']), 1000, 4000);
+    camera = new THREE.PerspectiveCamera(FOV, 1, 10, 12000);
+    // Soft sky light from above plus a warm sun from the front-left that casts the shadows.
+    hemi = new THREE.HemisphereLight(0xe2f2ff, 0x6b9a46, 1.4);
+    sun = new THREE.DirectionalLight(0xfff0d2, 2.4);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 3;
+    scene.add(hemi, sun, sun.target);
+    makeAssets();
+    buildStatic();
+  }
+
+  function buildStatic() {
+    // Sky: a far gradient plane, top colour to bottom colour.
+    const skyGeo = new THREE.PlaneGeometry(1, 1);
+    const top = new THREE.Color(C['sky-top']), bot = new THREE.Color(C['sky-bottom']);
+    skyGeo.setAttribute('color', new THREE.Float32BufferAttribute([top.r, top.g, top.b, top.r, top.g, top.b, bot.r, bot.g, bot.b, bot.r, bot.g, bot.b], 3));
+    R3.sky = new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }));
+    scene.add(R3.sky);
+    // Ground: a big grassy plane running off to the horizon.
+    R3.ground = new THREE.Mesh(GEO.plane, MAT.grass);
+    R3.ground.rotation.x = -Math.PI / 2;
+    R3.ground.receiveShadow = true;
+    scene.add(R3.ground);
+    // Soft hills on the horizon, so the ground has somewhere to go.
+    R3.hills = new THREE.Group();
+    scene.add(R3.hills);
+    for (let i = 0; i < 7; i++) {
+      const m = ball(R3.hills, i % 2 ? MAT.hillFar : MAT.hillNear, 0, 0, 0, 1);
+      m.castShadow = false;
+      m.userData.i = i;
+    }
+    // The litter of missed acorns: a slab that lifts the ground, with the newest acorns lying on top.
+    R3.slab = new THREE.Mesh(GEO.box, [MAT.heapSide, MAT.heapSide, MAT.heapTop, MAT.heapSide, MAT.heapFront, MAT.heapSide]);
+    R3.slab.position.set(0, 0, -75);   // a strip around the play line, not the whole foreground
+    R3.slab.castShadow = true;
+    R3.slab.receiveShadow = true;
+    R3.slab.visible = false;
+    scene.add(R3.slab);
+    const LIT = 400;
+    R3.litter = { body: new THREE.InstancedMesh(GEO.acornBody, MAT.litter, LIT), cap: new THREE.InstancedMesh(GEO.acornCap, MAT.litterCap, LIT), capacity: LIT, lastKey: '' };
+    for (const m of [R3.litter.body, R3.litter.cap]) {
+      m.castShadow = true; m.receiveShadow = true; m.count = 0; m.frustumCulled = false;
+      scene.add(m);
+    }
+    // Effect acorns (swept litter, x10 tosses) share the litter look.
+    const FXN = 160;
+    R3.fx = { body: new THREE.InstancedMesh(GEO.acornBody, MAT.litter, FXN), cap: new THREE.InstancedMesh(GEO.acornCap, MAT.litterCap, FXN), capacity: FXN };
+    for (const m of [R3.fx.body, R3.fx.cap]) {
+      m.castShadow = false; m.count = 0; m.frustumCulled = false;
+      scene.add(m);
+    }
+    // Layers, from the clouds at the back to the play plane at the front.
+    R3.cloudG = depthGroup(-1500);
+    R3.treeG = depthGroup(-130);
+    R3.pileG = depthGroup(-50);
+    R3.playG = depthGroup(0);
+    R3.pile = makePile();
+    R3.ghostPile = makePile();
+    R3.pileG.add(R3.pile.g, R3.ghostPile.g);
+    R3.sparkle = makeSparkle();
+    R3.playG.add(R3.sparkle.g);
+  }
+
+  // Camera, lights and the big static pieces follow the screen size.
+  function layoutScene() {
+    camera.aspect = W / H;
+    camD = (H / 2) / Math.tan(FOV / 2 * Math.PI / 180);   // the play plane fills the view exactly
+    camY = L.groundY0 - H / 2;                               // world y at the centre of the screen
+    camera.position.set(0, camY, camD);
+    camera.lookAt(0, camY, 0);
+    camera.updateProjectionMatrix();
+    for (const g of R3.groups) placeDepth(g);
+    sun.position.set(-W * 0.55, H * 1.5, 1300);
+    sun.target.position.set(0, H * 0.25, -150);
+    const sc = sun.shadow.camera, ext = Math.max(W, H) * 1.15;
+    sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext; sc.near = 50; sc.far = 6000;
+    sc.updateProjectionMatrix();
+    scene.fog.near = camD + 700;
+    scene.fog.far = camD + 3400;
+    const kS = (camD + 4000) / camD;
+    const skyMid = (L.groundY0 - H * 0.25) / 2;
+    R3.sky.position.set(0, camY + (Y(skyMid) - camY) * kS, -4000);
+    R3.sky.scale.set(W * 1.8 * kS, (L.groundY0 + H * 0.25) * kS, 1);
+    for (const m of R3.hills.children) {
+      const i = m.userData.i, far = i % 2 === 1;
+      const z = far ? -2900 : -2500, span = W * 7;
+      m.position.set(-span / 2 + (i + 0.5) * span / 7 + (hash(i + 9) - 0.5) * W, -120, z);
+      m.scale.set(W * (1.1 + hash(i) * 0.6), H * (0.55 + hash(i + 3) * 0.45), 500);
+    }
+    R3.ground.scale.set(W * 8, 3800, 1);
+    R3.ground.position.set(0, 0, -1300);
+    TEX.grass.repeat.set(W * 8 / 170, 3800 / 170);
+    TEX.heap.repeat.set(W * 3 / 150, 2);
+    TEX.heapFront.repeat.set(W * 3 / 150, 2);
+    TEX.heapSide.repeat.set(2, 2);
+    // The squirrel and anything falling are sized from S, so they are rebuilt.
+    if (R3.sq) R3.playG.remove(R3.sq.g);
+    R3.sq = buildSquirrel(L.SQ);
+    R3.playG.add(R3.sq.g);
+    for (const [, m] of R3.acorns) { R3.playG.remove(m.g); if (m.blob) R3.playG.remove(m.blob); }
+    R3.acorns.clear();
+    for (const [, m] of R3.branches) { R3.playG.remove(m.g); R3.playG.remove(m.blob); }
+    R3.branches.clear();
+    R3.pile.lastKey = R3.ghostPile.lastKey = R3.litter.lastKey = '';
+  }
+
+  // ------------------------------------------------------------------
+  // Living background: clouds, a tree with branches, swaying leaf clusters,
+  // acorns hanging in the canopy, and the odd leaf drifting down.
+  // Purely decorative; nothing here can be caught or hit.
+  // ------------------------------------------------------------------
+  const BG = { clouds: [], clusters: [], hang: [], leaves: [], limbs: [], r: 60, leafTimer: 0 };
+  let bgT = 0;
+
+  function buildBackground() {
+    const r = Math.max(50, Math.min(W * 0.16, H * 0.14));
+    BG.r = r;
+    BG.clusters = [];
+    for (let x = -r * 0.2, i = 0; x < W + r; x += r * 0.9, i++) {
+      BG.clusters.push({ x, y: L.canopyY - r * 0.35, r, phase: i * 1.7, dark: true });
+    }
+    for (let x = r * 0.25, i = 0; x < W + r; x += r * 0.9, i++) {
+      BG.clusters.push({ x, y: L.canopyY - r * 0.6, r: r * 0.9, phase: i * 2.3 + 1, dark: false });
+    }
+    // Limbs reach out from the trunk just below the canopy, each with a tuft
+    // of leaves at the tip, so the branches are visible and visibly swaying.
+    BG.limbs = [
+      { y: L.canopyY + r * 0.95, len: W * 0.40, lift: r * 0.45, w: L.trunkW * 0.42, tuft: r * 0.42, phase: 0.0 },
+      { y: L.canopyY + r * 1.35, len: W * 0.26, lift: r * 0.30, w: L.trunkW * 0.32, tuft: r * 0.34, phase: 2.1 },
+      { y: L.canopyY + r * 1.75, len: W * 0.15, lift: r * 0.18, w: L.trunkW * 0.26, tuft: r * 0.26, phase: 4.2 }
+    ];
+    BG.hang = [];
+    const n = Math.max(4, Math.round(W / 120));
+    for (let i = 0; i < n; i++) {
+      BG.hang.push({ x: (i + 0.5 + Math.random() * 0.4) * (L.trunkX / n), y: L.canopyY + r * (0.45 + Math.random() * 0.25), phase: Math.random() * 6.28 });
+    }
+    BG.clouds = [];
+    for (let i = 0; i < 3; i++) {
+      BG.clouds.push({ x: Math.random() * W, y: L.canopyY + r * 0.8 + (L.groundY0 - L.canopyY) * (0.08 + i * 0.16), s: L.S * (0.55 + Math.random() * 0.4), v: 6 + Math.random() * 8 });
+    }
+    BG.leaves = [];
+    if (renderer) { layoutScene(); buildTree(); }
+  }
+
+  function updateBackground(dt) {
+    bgT += dt;
+    const windy = Math.max(0, Math.min(1, state.mode === 'playing' ? (speedMul() - 1) / (TUNE.maxMul - 1) : 0));
+    for (const c of BG.clouds) {
+      c.x += c.v * (1 + windy * 2) * dt;
+      if (c.x - c.s * 2 > W) c.x = -c.s * 2;
+    }
+    BG.leafTimer -= dt;
+    if (BG.leafTimer <= 0 && BG.leaves.length < 6) {
+      BG.leaves.push({
+        x: Math.random() * L.trunkX, y: L.canopyY + BG.r * 0.6,
+        vy: H * (0.05 + Math.random() * 0.04), phase: Math.random() * 6.28, rot: Math.random() * 6.28,
+        size: L.acornR * (0.6 + Math.random() * 0.5)
+      });
+      BG.leafTimer = 1.6 + Math.random() * 2.4 - windy * 1.2;
+    }
+    for (let i = BG.leaves.length - 1; i >= 0; i--) {
+      const lf = BG.leaves[i];
+      lf.phase += dt * 2.2;
+      lf.y += lf.vy * (1 + windy * 0.6) * dt;
+      lf.x += (Math.sin(lf.phase) * 28 + windy * 30) * dt;
+      lf.rot += dt * 1.5;
+      if (lf.y > L.groundY + 4) BG.leaves.splice(i, 1);
+    }
+  }
+
+  // The tree, the clouds and the crowd are built once per layout from the BG numbers.
+  function buildTree() {
+    const T = R3.treeG;
+    T.clear();
+    R3.limbs = []; R3.clusters = []; R3.hang = []; R3.leaves = []; R3.peekers = [];
+    const r = BG.r, tw = L.trunkW, tx = X(L.trunkX + tw * 0.5);
+    // Trunk: a lathe with a flared base, reaching up into the leaves.
+    const h = Y(L.canopyY) + r * 0.4;
+    const prof = [[0, -80], [tw * 0.85, -80], [tw * 0.66, 20], [tw * 0.52, h * 0.35], [tw * 0.47, h * 0.75], [tw * 0.42, h], [0, h]]
+      .map(p => new THREE.Vector2(p[0], p[1]));
+    const trunk = new THREE.Mesh(new THREE.LatheGeometry(prof, 18), MAT.bark);
+    trunk.position.set(tx, 0, 0);
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    T.add(trunk);
+    // Limbs sway from a pivot on the trunk, with a leafy tuft at the tip and a twig halfway.
+    for (const lb of BG.limbs) {
+      const g = new THREE.Group();
+      g.position.set(tx, Y(lb.y), 0);
+      T.add(g);
+      const tipX = -lb.len, tipY = lb.lift;
+      rod(g, MAT.bark, 0, 0, 0, tipX, tipY, 0, lb.w * 0.5, GEO.taper);
+      const midX = -lb.len * 0.55, midY = lb.lift * 0.45;
+      rod(g, MAT.bark, midX, midY, 0, midX - lb.len * 0.07, midY + lb.tuft * 0.9, 0, lb.w * 0.22, GEO.taper);
+      const tuft = new THREE.Group();
+      tuft.position.set(tipX, tipY, 0);
+      g.add(tuft);
+      ball(tuft, MAT.leafDark, 0, lb.tuft * 0.2, 0, lb.tuft, lb.tuft * 0.9, lb.tuft, GEO.ico).rotation.set(0.4, 1.1, 0);
+      ball(tuft, MAT.leaf, -lb.tuft * 0.35, lb.tuft * 0.55, lb.tuft * 0.25, lb.tuft * 0.8, lb.tuft * 0.75, lb.tuft * 0.8, GEO.ico).rotation.set(1.2, 0.3, 0);
+      ball(tuft, MAT.leaf, lb.tuft * 0.45, lb.tuft * 0.45, -lb.tuft * 0.1, lb.tuft * 0.6, lb.tuft * 0.6, lb.tuft * 0.6, GEO.ico).rotation.set(0.2, 2.1, 0.5);
+      ball(g, MAT.leafDark, midX - lb.len * 0.07, midY + lb.tuft * 1.0, 0, lb.tuft * 0.75, lb.tuft * 0.7, lb.tuft * 0.75, GEO.ico).rotation.set(0.8, 0.6, 0);
+      R3.limbs.push({ g, tuft, phase: lb.phase, lift: lb.lift, len: lb.len });
+    }
+    // Canopy: the leaf clusters become faceted balls at a few depths, with a darker row behind.
+    for (const cl of BG.clusters) {
+      const z0 = (hash(cl.x + cl.y) - 0.6) * cl.r * 0.8;
+      const m = ball(T, cl.dark ? MAT.leafDark : MAT.leaf, X(cl.x), Y(cl.y), z0, cl.r, cl.r * 0.92, cl.r, GEO.ico);
+      m.rotation.set(hash(cl.x) * 3, hash(cl.y) * 3, 0);
+      m.receiveShadow = true;
+      R3.clusters.push({ m, x0: X(cl.x), y0: Y(cl.y), z0, r: cl.r, phase: cl.phase, rot0: m.rotation.y });
+      if (cl.dark) {
+        const b = ball(T, MAT.leafDeep, X(cl.x) + cl.r * 0.4, Y(cl.y) + cl.r * 0.1, z0 - cl.r * 1.3, cl.r * 1.15, cl.r, cl.r, GEO.ico);
+        b.rotation.set(1, hash(cl.x + 3) * 3, 0);
+        b.castShadow = false;
+      }
+    }
+    // Acorns hanging under the leaves, each on a short stem.
+    for (const hg of BG.hang) {
+      const g = new THREE.Group();
+      g.position.set(X(hg.x), Y(hg.y - L.acornR * 1.2), 10);
+      T.add(g);
+      rod(g, MAT.cap, 0, 0, 0, 0, -L.acornR * 0.9, 0, 1.2);
+      const a = makeAcorn(L.acornR * 0.55, 'plain');
+      a.position.y = -L.acornR * 1.2;
+      a.traverse(o => { if (o.isMesh) o.castShadow = true; });
+      g.add(a);
+      R3.hang.push({ g, y0: g.position.y, phase: hg.phase });
+    }
+    // A pool of drifting leaves.
+    for (let i = 0; i < 6; i++) {
+      const m = ball(T, MAT.leaf, 0, 0, 25, 1, 1, 1, GEO.low);
+      m.visible = false;
+      m.castShadow = false;
+      R3.leaves.push(m);
+    }
+    // The cheering crowd, hidden until the dance.
+    for (let i = 0; i < 4; i++) {
+      const hd = makePeekHead(L.S * 0.17, i % 2 === 1);
+      hd.visible = false;
+      T.add(hd);
+      R3.peekers.push(hd);
+    }
+    // Clouds, far back and scaled up to match.
+    const CG = R3.cloudG;
+    CG.clear();
+    R3.clouds = [];
+    for (const c of BG.clouds) {
+      const g = new THREE.Group();
+      CG.add(g);
+      for (const [ox, oy, rr] of [[0, 0, 0.55], [0.55, 0.18, 0.65], [1.2, 0, 0.5], [0.6, -0.2, 0.55]]) {
+        const m = ball(g, MAT.cloud, ox * c.s, oy * c.s, (ox - 0.6) * c.s * 0.3, rr * c.s);
+        m.castShadow = false;
+      }
+      R3.clouds.push({ g, c });
+    }
+  }
+
+  // Sway, drift, bob: the background breathes once per frame.
+  function animateScene() {
+    const windy = state.mode === 'playing' ? (speedMul() - 1) / (TUNE.maxMul - 1) : 0;
+    const sway = 1 + windy * 2.5;
+    for (const lb of R3.limbs) {
+      const bend = Math.sin(bgT * 1.1 + lb.phase) * sway * lb.lift * 0.12;
+      lb.g.rotation.z = bend * 1.6 / lb.len;
+      lb.tuft.rotation.z = Math.sin(bgT * 1.5 + lb.phase) * sway * 0.06;
+    }
+    for (const cl of R3.clusters) {
+      const dx = Math.sin(bgT * 1.3 + cl.phase) * sway * cl.r * 0.045;
+      const dy = Math.cos(bgT * 0.9 + cl.phase) * sway * cl.r * 0.02;
+      cl.m.position.set(cl.x0 + dx, cl.y0 + dy, cl.z0);
+      cl.m.rotation.y = cl.rot0 + Math.sin(bgT * 0.7 + cl.phase) * 0.06 * sway;
+    }
+    for (const hg of R3.hang) {
+      const bob = Math.sin(bgT * 2 + hg.phase) * (2 + windy * 4);
+      hg.g.position.y = hg.y0 - bob;
+      hg.g.rotation.z = Math.sin(bgT * 1.3 + hg.phase) * sway * 0.08;
+    }
+    for (let i = 0; i < R3.leaves.length; i++) {
+      const m = R3.leaves[i], lf = BG.leaves[i];
+      m.visible = !!lf;
+      if (!lf) continue;
+      m.position.set(X(lf.x), Y(lf.y), 25);
+      m.rotation.set(lf.rot * 0.5, lf.rot, Math.sin(lf.phase) * 0.6);
+      m.scale.set(lf.size, lf.size * 0.5, lf.size * 0.15);
+    }
+    for (const cd of R3.clouds) cd.g.position.set(X(cd.c.x), Y(cd.c.y), 0);
+    // The crowd pokes out from behind the leaves during the dance.
+    const edgeY = L.canopyY + BG.r * 0.62, pr = L.S * 0.17, spots = [0.12, 0.33, 0.56, 0.78];
+    for (let i = 0; i < R3.peekers.length; i++) {
+      const hd = R3.peekers[i];
+      if (state.dance <= 0) { hd.visible = false; continue; }
+      const p = 1.1 - state.dance;
+      const phase = Math.max(0, Math.min(1, (p - i * 0.08) / 0.8));
+      hd.visible = phase > 0;
+      if (!hd.visible) continue;
+      const poke = Math.sin(phase * Math.PI) * pr * 2.1;
+      hd.position.set(X(spots[i] * (L.trunkX - pr * 2) + pr), Y(edgeY - pr * 1.4 + poke), -BG.r * 0.45);
+      hd.rotation.z = Math.sin(bgT * 14 + i) * 0.12;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Things that are made of acorns: falling acorns, the litter, the piles.
+  // ------------------------------------------------------------------
+  function makeAcorn(r, kind) {
+    const g = new THREE.Group();
+    const bodyM = kind === 'gold' ? MAT.gold : kind === 'rotten' ? MAT.rotten : kind === 'sweep' ? MAT.silver : kind === 'ten' ? MAT.ruby : MAT.acorn;
+    const capM = kind === 'gold' ? MAT.goldCap : kind === 'rotten' ? MAT.rottenCap : kind === 'sweep' ? MAT.silverCap : kind === 'ten' ? MAT.rubyCap : MAT.cap;
+    ball(g, bodyM, 0, 0, 0, r, r, r, GEO.acornBody);
+    ball(g, bodyM, 0, 0, 0, r, r, r, GEO.acornTip);          // the little point at the bottom
+    ball(g, capM, 0, 0, 0, r, r, r, GEO.acornCap);
+    ball(g, capM, 0, 0, 0, r, r, r, GEO.acornRim);           // a raised rim where the cap meets the shell
+    rod(g, capM, 0, r * 0.95, 0, 0, r * 1.32, 0, r * 0.1);
+    ball(g, capM, 0, r * 1.34, 0, r * 0.15, r * 0.1, r * 0.15);   // knob on the stem
+    if (kind === 'rotten') {
+      ball(g, MAT.mould, -r * 0.3, -r * 0.3, r * 0.85, r * 0.2);
+      ball(g, MAT.mould, r * 0.35, -r * 0.05, r * 0.9, r * 0.14);
+      ball(g, MAT.mould, r * 0.05, -r * 0.6, r * 0.75, r * 0.11);
+    }
+    // Falling things cast no shadow: only dangers warn you from the ground.
+    g.traverse(o => { if (o.isMesh) o.castShadow = false; });
+    return g;
+  }
+
+  function makeAcornMesh(a) {
+    const kind = a.gold ? 'gold' : a.rotten ? 'rotten' : a.sweep ? 'sweep' : a.ten ? 'ten' : 'plain';
+    const r = L.acornR * ((a.gold || a.sweep || a.ten) ? 1.15 : a.rotten ? 1.0 : 0.95);
+    const g = makeAcorn(r, kind);
+    const m = { g, blob: null, halo: null, star: null, stink: null, ring: null, tag: null, r };
+    if (a.gold || a.sweep || a.ten) {
+      m.halo = new THREE.Sprite(a.gold ? MAT.halo : a.sweep ? MAT.haloBlue : MAT.haloRed);
+      m.halo.scale.set(r * 5.2, r * 5.2, 1);
+      g.add(m.halo);
+      m.star = new THREE.Sprite(MAT.star);
+      m.star.position.set(r * 1.3, r * 1.2, r);
+      g.add(m.star);
+    }
+    if (a.sweep) {
+      // A spinning ring: the sweeper reads as a power-up from a distance.
+      m.ring = new THREE.Mesh(GEO.acornRim, MAT.ring);
+      m.ring.scale.set(r * 2.1, r * 2.1, r * 2.1);
+      m.ring.position.y = -r * 0.5 * 2.1 + r * 0.1;
+      m.ring.castShadow = false;
+      g.add(m.ring);
+    }
+    if (a.ten) {
+      m.tag = new THREE.Sprite(MAT.tenTag);
+      m.tag.scale.set(r * 3.2, r * 3.2, 1);
+      g.add(m.tag);
+    }
+    if (a.rotten) {
+      // Rotten acorns cast a faint shadow: the sneaky middle case between acorns and branches.
+      m.blob = new THREE.Mesh(GEO.disc, MAT.blobFaint);
+      m.blob.rotation.x = -Math.PI / 2;
+      m.blob.scale.set(L.acornR * 1.4, L.acornR * 1.3, 1);
+      m.blob.renderOrder = 1;
+      m.stink = [ball(g, MAT.stink, -r * 0.55, r * 1.3, r * 0.3, r * 0.16), ball(g, MAT.stink, r * 0.55, r * 1.3, r * 0.3, r * 0.13)];
+      for (const s of m.stink) s.castShadow = false;
+    }
+    return m;
+  }
+
+  function syncAcorns() {
+    const seen = R3.seen;
+    seen.clear();
+    for (const a of state.acorns) {
+      let m = R3.acorns.get(a);
+      if (!m) {
+        m = makeAcornMesh(a);
+        R3.acorns.set(a, m);
+        R3.playG.add(m.g);
+        if (m.blob) R3.playG.add(m.blob);
+      }
+      seen.add(a);
+      m.g.position.set(X(a.x), Y(a.y), 0);
+      if (a.gold || a.sweep || a.ten) {
+        m.g.rotation.set(0, a.rot * 0.8, Math.sin(a.wob) * 0.25);
+        const pulse = 0.75 + 0.25 * Math.sin(state.t * 7);
+        m.halo.material.opacity = 0.55 * pulse;
+        const tw = 0.6 + 0.4 * Math.sin(state.t * 11 + 1);
+        m.star.scale.set(m.r * 1.3 * tw, m.r * 1.3 * tw, 1);
+        if (m.ring) { m.ring.rotation.set(0.5 + Math.sin(bgT * 2) * 0.4, bgT * 4, 0); }
+        if (m.tag) {
+          m.tag.position.set(0, m.r * 2.4 + Math.sin(bgT * 5) * m.r * 0.25, m.r);
+          const ts = m.r * (3.0 + 0.3 * Math.sin(bgT * 6));
+          m.tag.scale.set(ts, ts, 1);
+        }
+      } else {
+        m.g.rotation.set(a.rot * 0.4, a.rot * 0.9, a.rot * 0.3);
+      }
+      if (m.blob) {
+        m.blob.visible = !a.bounced;
+        m.blob.position.set(X(a.x), state.rise + 1.2, 0);
+      }
+      if (m.stink) {
+        for (let i = 0; i < 2; i++) {
+          const ph = (bgT * 0.8 + i * 0.5) % 1;
+          m.stink[i].position.set((i ? 1 : -1) * m.r * 0.55 + Math.sin(bgT * 4 + i) * m.r * 0.3, m.r * (1.1 + ph * 0.9), m.r * 0.3);
+          m.stink[i].material.opacity = 0.45 * (1 - ph);
+        }
+      }
+    }
+    for (const [a, m] of R3.acorns) {
+      if (seen.has(a)) continue;
+      R3.playG.remove(m.g);
+      if (m.blob) R3.playG.remove(m.blob);
+      R3.acorns.delete(a);
+    }
+  }
+
+  function makeBranch() {
+    const g = new THREE.Group();
+    const w = L.branchW, h = L.branchH;
+    rod(g, MAT.branch, -w / 2, 0, 0, w / 2, 0, 0, h * 0.45);
+    rod(g, MAT.branch, -w * 0.15, 0, 0, -w * 0.05, h * 0.9, h * 0.3, h * 0.2);
+    rod(g, MAT.branch, w * 0.2, 0, 0, w * 0.32, h * 0.75, -h * 0.4, h * 0.16);
+    ball(g, MAT.leafDark, w * 0.46, h * 0.55, 0, h * 0.6, h * 0.5, h * 0.6, GEO.ico);
+    ball(g, MAT.leaf, w * 0.55, h * 0.35, h * 0.3, h * 0.5, h * 0.4, h * 0.5, GEO.ico);
+    ball(g, MAT.leaf, w * 0.38, h * 0.9, -h * 0.2, h * 0.42, h * 0.35, h * 0.42, GEO.ico);
+    g.traverse(o => { if (o.isMesh) o.castShadow = false; });
+    return g;
+  }
+
+  function syncBranches() {
+    const seen = R3.seen;
+    seen.clear();
+    for (const b of state.branches) {
+      let m = R3.branches.get(b);
+      if (!m) {
+        const blob = new THREE.Mesh(GEO.disc, new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.3, depthWrite: false }));
+        blob.rotation.x = -Math.PI / 2;
+        blob.renderOrder = 1;
+        m = { g: makeBranch(), blob, phase: Math.random() * 6.28, tumble: 2 + Math.random() * 2 };
+        R3.branches.set(b, m);
+        R3.playG.add(m.g, m.blob);
+      }
+      seen.add(b);
+      m.g.position.set(X(b.x), Y(b.y), 0);
+      m.g.rotation.set(bgT * m.tumble + m.phase, 0, Math.sin(bgT * 2 + m.phase) * 0.12);
+      // The shadow grows and darkens as the branch closes in.
+      const p = Math.max(0, Math.min(1, (b.y - b.startY) / (L.groundY - b.startY)));
+      const w = L.branchW * (0.45 + 0.65 * p);
+      m.blob.scale.set(w / 2, w * 0.42, 1);
+      m.blob.position.set(X(b.x), state.rise + 1.5, 0);
+      m.blob.material.opacity = 0.18 + 0.4 * p;
+    }
+    for (const [b, m] of R3.branches) {
+      if (seen.has(b)) continue;
+      R3.playG.remove(m.g, m.blob);
+      m.blob.material.dispose();
+      R3.branches.delete(b);
+    }
+  }
+
+  const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _e = new THREE.Euler();
+  const COL = { acorn: new THREE.Color('#8a5a2b'), cap: new THREE.Color('#5e3b19'), gold: new THREE.Color('#e9b63a'), goldCap: new THREE.Color('#a66d10') };
+
+  // Missed acorns lie where they fell, on top of the slab they have built.
+  function syncLitter() {
+    const li = R3.litter, n = state.litter.length;
+    const key = n + ':' + Math.round(state.rise) + ':' + W + ':' + L.acornR.toFixed(1);
+    if (key === li.lastKey) return;
+    li.lastKey = key;
+    R3.slab.visible = state.rise > 0.5;
+    R3.slab.scale.set(W * 3, Math.max(0.1, state.rise), 290);
+    const m = Math.min(li.capacity, n), off = Math.max(0, n - li.capacity), ar = L.acornR * 0.85;
+    for (let k = 0; k < m; k++) {
+      const lt = state.litter[k + off], j = k + off;
+      _p.set(lt.fx * W - W / 2, state.rise + ar * 0.9, hash(j + 500) * 250 - 200);
+      _e.set(Math.PI / 2 + (hash(j + 900) - 0.5) * 0.7, lt.rot * 3, 0);
+      _q.setFromEuler(_e);
+      _s.setScalar(ar);
+      _m4.compose(_p, _q, _s);
+      li.body.setMatrixAt(k, _m4);
+      li.cap.setMatrixAt(k, _m4);
+      li.body.setColorAt(k, lt.gold ? COL.gold : COL.acorn);
+      li.cap.setColorAt(k, lt.gold ? COL.goldCap : COL.cap);
+    }
+    li.body.count = li.cap.count = m;
+    li.body.instanceMatrix.needsUpdate = li.cap.instanceMatrix.needsUpdate = true;
+    if (li.body.instanceColor) li.body.instanceColor.needsUpdate = true;
+    if (li.cap.instanceColor) li.cap.instanceColor.needsUpdate = true;
+  }
+
+  function syncFx() {
+    const fx = R3.fx;
+    let k = 0;
+    const ar = L.acornR * 0.85;
+    for (const f of state.fx) {
+      if (f.t < 0 || k >= fx.capacity) continue;
+      const p = Math.min(1, f.t / f.life);
+      let x, y, z = 10, sc = ar;
+      if (f.kind === 'poof') {
+        x = f.x; y = f.y;
+        sc = ar * (1 - p * p);                               // shrinks away as it floats off
+      } else {
+        x = f.x + (f.tx - f.x) * p;
+        y = f.y + (f.ty - f.y) * p - Math.sin(p * Math.PI) * f.arc;
+        z = 40 - p * 90;                                      // lands behind, where the pile sits
+      }
+      _p.set(X(x), Y(y), z);
+      _e.set(f.rot * 0.5, f.rot, f.rot * 0.3);
+      _q.setFromEuler(_e);
+      _s.setScalar(Math.max(0.001, sc));
+      _m4.compose(_p, _q, _s);
+      fx.body.setMatrixAt(k, _m4);
+      fx.cap.setMatrixAt(k, _m4);
+      fx.body.setColorAt(k, f.gold ? COL.gold : COL.acorn);
+      fx.cap.setColorAt(k, f.gold ? COL.goldCap : COL.cap);
+      k++;
+    }
+    fx.body.count = fx.cap.count = k;
+    if (k) {
+      fx.body.instanceMatrix.needsUpdate = fx.cap.instanceMatrix.needsUpdate = true;
+      if (fx.body.instanceColor) fx.body.instanceColor.needsUpdate = true;
+      if (fx.cap.instanceColor) fx.cap.instanceColor.needsUpdate = true;
+    }
+  }
+
+  // A pile is a mound with real acorns heaped over it. The ghost is the same mound, see-through.
+  function makePile() {
+    const g = new THREE.Group();
+    const dome = new THREE.Mesh(GEO.dome, MAT.heap);
+    dome.castShadow = true;
+    dome.receiveShadow = true;
+    const wire = new THREE.Mesh(GEO.dome, MAT.ghostWire);
+    wire.visible = false;
+    const CAP = 170;
+    const body = new THREE.InstancedMesh(GEO.acornBody, MAT.acorn, CAP);
+    const cap = new THREE.InstancedMesh(GEO.acornCap, MAT.cap, CAP);
+    for (const m of [body, cap]) { m.castShadow = true; m.receiveShadow = true; m.count = 0; m.frustumCulled = false; }
+    g.add(dome, wire, body, cap);
+    g.visible = false;
+    return { g, dome, wire, body, cap, capacity: CAP, lastKey: '' };
+  }
+
+  function syncPile(p, cx, n, asGhost) {
+    const r = pileRadius(n);
+    p.g.visible = r > 0;
+    if (!p.g.visible) return;
+    const key = n + ':' + Math.round(r) + ':' + asGhost + ':' + Math.round(state.rise) + ':' + L.acornR.toFixed(1) + ':' + Math.round(cx);
+    if (key === p.lastKey) return;
+    p.lastKey = key;
+    p.g.position.set(X(cx), state.rise, 0);
+    p.dome.scale.set(r * 1.25, r * 1.15, r * 0.95);
+    p.wire.scale.copy(p.dome.scale);
+    p.dome.material = asGhost ? MAT.ghost : MAT.heap;
+    p.dome.castShadow = !asGhost;
+    p.wire.visible = asGhost;
+    const m = asGhost ? 0 : Math.min(p.capacity, n);
+    const ar = Math.min(L.acornR * 0.8, r * 0.42);
+    for (let k = 0; k < m; k++) {
+      // Spiral down the dome from the top so the heap fills evenly.
+      const yk = 1 - (k + 0.5) / m * 0.92;
+      const rr = Math.sqrt(Math.max(0, 1 - yk * yk)), th = k * 2.39996 + 0.5;
+      _p.set(Math.cos(th) * rr * r * 1.22, yk * r * 1.12, Math.sin(th) * rr * r * 0.92);
+      _e.set(hash(k) * 3, hash(k + 77) * 6, hash(k + 31) * 3);
+      _q.setFromEuler(_e);
+      _s.setScalar(ar);
+      _m4.compose(_p, _q, _s);
+      p.body.setMatrixAt(k, _m4);
+      p.cap.setMatrixAt(k, _m4);
+    }
+    p.body.count = p.cap.count = m;
+    p.body.instanceMatrix.needsUpdate = p.cap.instanceMatrix.needsUpdate = true;
+  }
+
+  // ------------------------------------------------------------------
+  // The squirrel. Built in a local space where (0,0,0) is the point where
+  // its feet touch the ground, facing +x, S = overall size. The near side
+  // of the body is +z, toward the camera.
+  // ------------------------------------------------------------------
+  function buildSquirrel(S) {
+    const fur = MAT.fur.clone(), cheek = MAT.cheek.clone();
+    const g = new THREE.Group();
+    const sq = {
+      g, S, fur, cheek,
+      furColor: new THREE.Color(FUR), sickColor: new THREE.Color('#b9a04a'),
+      cheekColor: new THREE.Color('#f1c08f'), sickCheek: new THREE.Color('#a9c37a')
+    };
+    // Tail: a thick S-curve tube behind the body with a lighter stripe and a bushy tip.
+    const pivot = new THREE.Vector3(-0.08 * S, 0.22 * S, 0);
+    const pts = [[-0.08, 0.22, 0], [-0.36, 0.17, -0.03], [-0.54, 0.52, -0.06], [-0.44, 0.9, -0.03], [-0.14, 1.0, 0.02]]
+      .map(p => new THREE.Vector3(p[0] * S, p[1] * S, p[2] * S).sub(pivot));
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const tail = new THREE.Group();
+    tail.position.copy(pivot);
+    g.add(tail);
+    const t1 = new THREE.Mesh(new THREE.TubeGeometry(curve, 28, 0.095 * S, 10, false), MAT.furDark);
+    t1.castShadow = true;
+    tail.add(t1);
+    const t2 = new THREE.Mesh(new THREE.TubeGeometry(curve, 28, 0.062 * S, 8, false), fur);
+    t2.position.z = 0.05 * S;
+    tail.add(t2);
+    const tip = pts[pts.length - 1];
+    ball(tail, MAT.furDark, tip.x, tip.y, tip.z, 0.115 * S);
+    ball(tail, MAT.furLight, tip.x + 0.02 * S, tip.y, tip.z + 0.07 * S, 0.07 * S);
+    sq.tail = tail;
+    // Body and belly.
+    sq.body = ball(g, fur, 0, 0.30 * S, 0, 0.23 * S, 0.27 * S, 0.20 * S);
+    sq.belly = ball(g, MAT.belly, 0.08 * S, 0.27 * S, 0.06 * S, 0.16 * S, 0.19 * S, 0.16 * S);
+    // Haunches, feet, arms and paws: the near side at +z, the far side at -z.
+    sq.feet = []; sq.arms = []; sq.paws = [];
+    for (const side of [1, -1]) {
+      ball(g, fur, -0.04 * S, 0.14 * S, side * 0.11 * S, 0.10 * S, 0.09 * S, 0.08 * S);
+      sq.feet.push(ball(g, side > 0 ? fur : MAT.furDark, 0, 0.035 * S, side * 0.10 * S, 0.11 * S, 0.04 * S, 0.06 * S));
+      sq.arms.push(rod(g, fur, 0.11 * S, 0.40 * S, side * 0.09 * S, 0.26 * S, 0.50 * S, side * 0.05 * S, 0.03 * S));
+      sq.paws.push(ball(g, MAT.furDark, 0.27 * S, 0.51 * S, side * 0.05 * S, 0.032 * S));
+    }
+    sq.held = makeAcorn(0.06 * S, 'plain');
+    sq.held.position.set(0.31 * S, 0.46 * S, 0);
+    sq.held.visible = false;
+    g.add(sq.held);
+    // Head.
+    const head = new THREE.Group();
+    head.position.set(0.15 * S, 0.60 * S, 0);
+    g.add(head);
+    sq.head = head;
+    ball(head, fur, 0, 0, 0, 0.17 * S);
+    for (const side of [1, -1]) {
+      ball(head, fur, -0.08 * S, 0.15 * S, side * 0.085 * S, 0.06 * S, 0.07 * S, 0.045 * S);
+      ball(head, MAT.pink, -0.065 * S, 0.15 * S, side * 0.085 * S, 0.035 * S, 0.045 * S, 0.025 * S);
+    }
+    ball(head, MAT.belly, 0.12 * S, -0.04 * S, 0, 0.085 * S, 0.075 * S, 0.085 * S);   // snout
+    ball(head, MAT.ink, 0.195 * S, -0.02 * S, 0, 0.03 * S);                           // nose
+    sq.mouth = ball(head, MAT.ink, 0.16 * S, -0.08 * S, 0, 0.03 * S, 0.007 * S, 0.025 * S);
+    sq.eyes = []; sq.pupils = []; sq.cheeks = [];
+    for (const side of [1, -1]) {
+      sq.eyes.push(ball(head, MAT.white, 0.06 * S, 0.045 * S, side * 0.115 * S, 0.05 * S));
+      const p = new THREE.Group();
+      p.position.set(0.06 * S, 0.045 * S, side * 0.115 * S);
+      head.add(p);
+      ball(p, MAT.ink, 0.028 * S, 0, side * 0.025 * S, 0.028 * S);
+      ball(p, MAT.white, 0.045 * S, 0.012 * S, side * 0.03 * S, 0.01 * S);
+      sq.pupils.push(p);
+      // Cheeks carry the lives: bigger with more acorns tucked in.
+      sq.cheeks.push(ball(head, cheek, 0.07 * S, -0.09 * S, side * 0.13 * S, 0.06 * S));
+    }
+    sq.sweat = [ball(head, MAT.sweat, -0.12 * S, 0.1 * S, 0.12 * S, 0.025 * S), ball(head, MAT.sweat, -0.02 * S, 0.2 * S, 0.1 * S, 0.02 * S)];
+    for (const s of sq.sweat) { s.visible = false; s.castShadow = false; }
+    return sq;
+  }
+
+  function setArms(sq, sitting, run) {
+    const S = sq.S;
+    for (let i = 0; i < 2; i++) {
+      const side = i === 0 ? 1 : -1;
+      if (sitting) {
+        setRod(sq.arms[i], 0.11 * S, 0.36 * S, side * 0.09 * S, 0.28 * S, 0.44 * S, side * 0.03 * S, 0.03 * S);
+        sq.paws[i].position.set(0.29 * S, 0.45 * S, side * 0.03 * S);
+      } else {
+        const sw = Math.sin(run + i * Math.PI) * 0.03;
+        setRod(sq.arms[i], 0.11 * S, 0.40 * S, side * 0.09 * S, (0.26 + sw) * S, (0.50 - sw) * S, side * 0.05 * S, 0.03 * S);
+        sq.paws[i].position.set((0.27 + sw) * S, (0.51 - sw) * S, side * 0.05 * S);
+      }
+    }
+  }
+
+  function updateSquirrel3D() {
+    const sq = R3.sq, S = L.SQ, g = sq.g;
+    const sitting = state.mode === 'gameover';
+    let gy = state.rise;   // feet on the surface
+    if (sitting) {
+      // Perch on top of the pile once we've walked there.
+      const k = Math.min(1, state.over.t / 1.1);
+      gy += pileRadius(state.pile) * 1.05 * k;
+    }
+    // Blink while invulnerable.
+    g.visible = !(state.invuln > 0 && Math.floor(state.invuln * 14) % 2 === 0);
+    // Turning: ease between the two three-quarter views, passing through a face-on frame.
+    R3.faceK += (state.facing - R3.faceK) * Math.min(1, frameDt * 9);
+    const yaw = Math.PI / 2 - R3.faceK * (Math.PI / 2 + 0.35);
+    let hop = 0, wig = 0, spin = 0;
+    if (state.dance > 0) {
+      // Victory hop with a wiggle and a twirl; play goes on underneath.
+      const p = 1.1 - state.dance;
+      hop = Math.abs(Math.sin(p * Math.PI * 4)) * S * 0.22;
+      wig = Math.sin(p * Math.PI * 8) * 0.18;
+      spin = Math.sin(p * Math.PI * 2) * 0.8;
+    }
+    const sick = state.slow > 0 && !sitting;
+    const knocked = state.knocked > 0;
+    const run = state.runPhase * Math.PI * 2;
+    // Knocked down: flat on the back, belly up, legs flailing in the air.
+    g.position.set(X(state.sx), gy + hop + (knocked ? S * 0.22 : 0), 0);
+    g.rotation.set(0, yaw + spin, (knocked ? Math.PI / 2 : 0) + wig + (sick ? Math.sin(bgT * 9) * 0.04 : 0));
+    const swing = knocked ? Math.sin(state.knocked * 22) * 0.16 : Math.sin(run) * 0.07;
+    const spread = sitting ? 0.17 : 0.09;
+    sq.feet[0].position.x = (spread - swing) * S;
+    sq.feet[1].position.x = (-spread + swing) * S;
+    sq.body.position.y = (sitting ? 0.26 : 0.30) * S;
+    sq.body.scale.y = (sitting ? 0.24 : 0.27) * S;
+    sq.belly.position.y = (sitting ? 0.24 : 0.27) * S;
+    sq.head.position.y = (sitting ? 0.56 : 0.60) * S;
+    setArms(sq, sitting, run);
+    sq.held.visible = sitting;
+    const lives = sitting ? 0 : state.lives;
+    for (const c of sq.cheeks) { c.visible = lives > 0; c.scale.setScalar((0.055 + lives * 0.02) * S); }
+    const open = knocked || state.slow > 0 || (sitting && Math.floor(state.over.t * 6) % 2 === 0);
+    sq.mouth.scale.set(0.03 * S, (open ? 0.03 : 0.007) * S, 0.025 * S);
+    sq.mouth.position.y = (open ? -0.095 : -0.08) * S;
+    // Eyes blink every few seconds; squeezed shut when sick.
+    const blink = !knocked && ((bgT % 3.7) < 0.12);
+    const ey = (blink || sick) ? 0.12 : 1;
+    for (const e of sq.eyes) e.scale.set(0.05 * S, 0.05 * S * ey, 0.05 * S);
+    for (const p of sq.pupils) p.visible = ey === 1;
+    // Sick: a green tinge and a couple of sweat drops.
+    sq.fur.color.lerpColors(sq.furColor, sq.sickColor, sick ? 0.45 : 0);
+    sq.cheek.color.lerpColors(sq.cheekColor, sq.sickCheek, sick ? 0.6 : 0);
+    const dripY = (bgT * 1.7) % 1;
+    sq.sweat[0].visible = sq.sweat[1].visible = sick;
+    sq.sweat[0].position.y = (0.10 - dripY * 0.12) * S;
+    sq.sweat[1].position.y = (0.2 - ((dripY + 0.5) % 1) * 0.1) * S;
+    // Tail flicks while idle and swishes while running.
+    const wag = knocked ? 0 : Math.sin(bgT * 2.6) * 0.05 + Math.sin(run) * 0.06 + (sick ? Math.sin(bgT * 9) * 0.03 : 0);
+    sq.tail.rotation.set(wag * 2.5, 0, wag * 1.2);
+  }
+
+  // Small squirrel heads bobbing out from under the canopy while the crowd cheers.
+  function makePeekHead(r, flip) {
+    const g = new THREE.Group();
+    ball(g, MAT.fur, 0, 0, 0, r);
+    for (const s of [1, -1]) {
+      ball(g, MAT.fur, -r * 0.55, r * 0.85, s * r * 0.3, r * 0.36);
+      ball(g, MAT.pink, -r * 0.45, r * 0.85, s * r * 0.32, r * 0.2);
+    }
+    ball(g, MAT.belly, r * 0.7, -r * 0.25, 0, r * 0.5);
+    ball(g, MAT.ink, r * 1.08, -r * 0.12, 0, r * 0.17);
+    ball(g, MAT.ink, r * 0.85, -r * 0.5, 0, r * 0.18, r * 0.14, r * 0.12);   // open, cheering mouth
+    for (const s of [1, -1]) {
+      ball(g, MAT.white, r * 0.3, r * 0.25, s * r * 0.75, r * 0.28);
+      ball(g, MAT.ink, r * 0.45, r * 0.25, s * r * 0.85, r * 0.17);
+    }
+    g.rotation.y = flip ? Math.PI + 0.35 : -0.35;
+    return g;
+  }
+
+  // Gold motes radiating from the squirrel after a golden acorn.
+  function makeSparkle() {
+    const g = new THREE.Group(), dots = [];
+    for (let i = 0; i < 10; i++) {
+      const d = ball(g, i % 2 ? MAT.sparkA : MAT.sparkB, 0, 0, 0, 1, 1, 1, GEO.low);
+      d.castShadow = false;
+      dots.push(d);
+    }
+    g.visible = false;
+    return { g, dots };
+  }
+  function updateSparkle() {
+    const sp = R3.sparkle;
+    sp.g.visible = state.sparkle > 0;
+    if (!sp.g.visible) return;
+    const S = L.SQ, p = 1 - state.sparkle / 0.8;   // 0 -> 1 over the effect
+    const cx = X(state.sx), cy = state.rise + S * 0.5;
+    MAT.sparkA.opacity = MAT.sparkB.opacity = 1 - p;
+    sp.dots.forEach((d, i) => {
+      const ang = i / 10 * Math.PI * 2 + p * 0.8, dd = S * (0.35 + p * 0.9);
+      d.position.set(cx + Math.cos(ang) * dd, cy + Math.sin(ang) * dd * 0.8 + p * S * 0.3, Math.sin(ang * 2) * S * 0.3 + S * 0.2);
+      d.scale.setScalar(S * 0.05 * (1 - p * 0.6));
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Text overlay: numbers on the piles, GAME OVER, and the pause dim.
+  // ------------------------------------------------------------------
+  const _v = new THREE.Vector3();
+  function projectLocal(obj, x, y, z) {
+    obj.localToWorld(_v.set(x, y, z)).project(camera);
+    return { x: (_v.x + 1) / 2 * W, y: (1 - _v.y) / 2 * H };
+  }
+
+  // The caught count sits on the pile itself; the ghost pile shows the friend's number in grey.
+  function drawPileLabel(p, n, ghost) {
+    if (n <= 0) return;
+    const r = pileRadius(n);
+    if (r <= 0) return;
+    let size = Math.max(14, Math.min(r * 0.95, L.S * 0.42, 34));
+    if (!ghost && state.labelPop > 0) size *= 1 + 0.45 * Math.sin(Math.PI * state.labelPop / 0.35);   // a bounce each time a tossed acorn lands
+    // Project on the pile's own plane rather than its front face: a point pushed
+    // toward the camera gets magnified sideways too, which shoved the number off
+    // the right edge on wide screens. Clamp as well so it can never leave the view.
+    const pt = projectLocal(p.g, 0, Math.max(r * 0.55, size * 0.6), 0);
+    const pad = size * 0.9;
+    const lx = Math.max(pad, Math.min(W - pad, pt.x - r * 0.2));   // a touch left: the heap hugs the trunk
+    const ly = Math.max(size, Math.min(H - size, pt.y));
+    octx.save();
+    octx.font = `800 ${size}px "Segoe UI", system-ui, -apple-system, Roboto, sans-serif`;
+    octx.textAlign = 'center';
+    octx.textBaseline = 'middle';
+    octx.lineJoin = 'round';
+    octx.lineWidth = size * 0.22;
+    octx.strokeStyle = ghost ? 'rgba(255,255,255,0.85)' : '#fff';
+    octx.fillStyle = ghost ? '#8c8c8c' : '#5e3b19';
+    octx.strokeText(String(n), lx, ly);
+    octx.fillText(String(n), lx, ly);
+    octx.restore();
+  }
+
+  // "Game Over" pops in above the squirrel once it has settled on its pile.
+  function drawGameOver() {
+    const k = Math.min(1, (state.over.t - 1.3) / 0.45);
+    const scale = 0.6 + 0.4 * (1 - Math.pow(1 - k, 3)) + (k < 1 ? Math.sin(k * Math.PI) * 0.12 : 0);
+    const size = Math.min(W * 0.13, 64);
+    octx.save();
+    octx.translate(W / 2, H * 0.36);
+    octx.scale(scale, scale);
+    octx.globalAlpha = Math.min(1, k * 1.5);
+    octx.font = `800 ${size}px "Segoe UI", system-ui, -apple-system, Roboto, sans-serif`;
+    octx.textAlign = 'center';
+    octx.textBaseline = 'middle';
+    octx.lineJoin = 'round';
+    octx.lineWidth = size * 0.18;
+    octx.strokeStyle = 'rgba(255,255,255,0.95)';
+    octx.strokeText('GAME OVER', 0, 0);
+    octx.fillStyle = INK;
+    octx.fillText('GAME OVER', 0, 0);
+    octx.restore();
+  }
+
+  function drawOverlay() {
+    octx.clearRect(0, 0, W, H);
+    const ghostGone = state.ghost > 0 && state.pile > state.ghost;
+    if (state.ghost > 0 && !ghostGone) drawPileLabel(R3.ghostPile, state.ghost, true);
+    drawPileLabel(R3.pile, state.pile, false);
+    if (state.mode === 'gameover' && state.over.shown) {
+      // Soft dim so the buttons read; the pile stays the hero.
+      octx.fillStyle = 'rgba(255,255,255,0.12)';
+      octx.fillRect(0, 0, W, H);
+      drawGameOver();
+    } else if (state.mode === 'paused') {
+      // Stronger dim so a frozen scene reads as paused, not stuck.
+      octx.fillStyle = 'rgba(255,255,255,0.4)';
+      octx.fillRect(0, 0, W, H);
+    }
+  }
+
+  function draw() {
+    if (!renderer) return;
+    animateScene();
+    syncLitter();
+    syncFx();
+    // Once the real pile is bigger, it visually swallows the ghost.
+    const ghostGone = state.ghost > 0 && state.pile > state.ghost;
+    syncPile(R3.ghostPile, L.ghostX, state.ghost, !ghostGone);
+    syncPile(R3.pile, L.pileX, state.pile, false);
+    syncAcorns();
+    syncBranches();
+    updateSquirrel3D();
+    updateSparkle();
+    renderer.render(scene, camera);
+    drawOverlay();
+  }
+
+  // ------------------------------------------------------------------
+  // Loop
+  // ------------------------------------------------------------------
+  let last = performance.now();
+  // The splash shows its loading animation until the scene has rendered a
+  // couple of frames (shaders compiled, textures uploaded) and the logo has had
+  // a moment on screen; then the loader gives way to the Start button.
+  let booted = false, bootFrames = 0;
+  const BOOT_MIN = 1500;
+  function frame(now) {
+    let dt = (now - last) / 1000;
+    last = now;
+    if (dt > 0.05) dt = 0.05; // tab switches and hiccups don't teleport things
+    frameDt = dt;
+    update(dt);
+    draw();
+    updateHud();
+    if (!booted && ++bootFrames >= 2 && now >= BOOT_MIN) {
+      booted = true;
+      splash.classList.add('loaded');
+    }
+    requestAnimationFrame(frame);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    last = performance.now();
+    if (document.hidden) pauseGame();   // switching apps mid-run should not cost a life
+  });
+  window.addEventListener('blur', () => pauseGame());
+
+  // Boot
+  cacheColors();
+  initScene();
+  resize();
+  reset();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
